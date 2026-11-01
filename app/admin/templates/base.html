@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{% block title %}Админка{% endblock %} · blrd ai</title>
+<style>
+:root{--bg:#0b0b0d;--card:#131317;--line:#222228;--text:#ececed;--dim:#8d8d96;
+  --accent:#4f9dff;--ok:#3ddc84;--warn:#ffb340;--err:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,"Segoe UI",Inter,Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+header.top{position:sticky;top:0;z-index:10;background:rgba(11,11,13,.94);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:18px;letter-spacing:-.02em}
+nav{display:flex;gap:4px;flex-wrap:wrap;flex:1}
+nav a{padding:7px 13px;border-radius:9px;color:var(--dim);font-weight:500}
+nav a:hover{background:#1b1b20;text-decoration:none}
+nav a.on{background:#1f1f26;color:var(--text)}
+main{max-width:1180px;margin:0 auto;padding:22px 20px 70px}
+h1{font-size:23px;margin:0 0 18px;letter-spacing:-.02em}
+h2{font-size:17px;margin:26px 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+.grid{display:grid;gap:12px}
+.grid.c4{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.grid.c2{grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 17px}
+.kpi .v{font-size:27px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.kpi .l{color:var(--dim);font-size:13.5px;margin-top:4px}
+.kpi .s{color:var(--dim);font-size:12.5px;margin-top:7px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{color:var(--dim);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+tr:last-child td{border-bottom:0}
+.tbl-wrap{overflow-x:auto}
+input,select,textarea,button{font:inherit;color:var(--text)}
+input,select,textarea{background:#0d0d10;border:1px solid var(--line);border-radius:9px;padding:9px 11px;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#39394a}
+textarea{resize:vertical;font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:13px;line-height:1.55}
+label{display:block;color:var(--dim);font-size:13px;margin:0 0 5px}
+.field{margin-bottom:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1;min-width:130px}
+.btn{background:#f2f2f2;color:#000;border:0;border-radius:9px;padding:9px 15px;font-weight:600;cursor:pointer}
+.btn:hover{opacity:.88}
+.btn.ghost{background:#1f1f26;color:var(--text)}
+.btn.danger{background:#3a1619;color:#ff9d9d}
+.btn.sm{padding:6px 11px;font-size:13px}
+.btn[disabled]{opacity:.45;cursor:default}
+.tag{display:inline-block;padding:2px 8px;border-radius:7px;font-size:12px;font-weight:600}
+.tag.pro{background:#1d2f1f;color:var(--ok)}
+.tag.free{background:#1f1f26;color:var(--dim)}
+.tag.ban{background:#3a1619;color:#ff9d9d}
+.tag.adm{background:#1b2537;color:var(--accent)}
+.flash{border-radius:11px;padding:12px 15px;margin-bottom:16px;font-weight:500}
+.flash.ok{background:#14271a;color:var(--ok);border:1px solid #1f4029}
+.flash.err{background:#2a1316;color:var(--err);border:1px solid #452026}
+.flash.warn{background:#2a2113;color:var(--warn);border:1px solid #453a20}
+.dim{color:var(--dim)}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.chart{display:flex;align-items:flex-end;gap:5px;height:130px;margin-top:8px}
+.chart .bar{flex:1;background:#2a3f5e;border-radius:4px 4px 0 0;min-height:3px;position:relative}
+.chart .bar:hover{background:var(--accent)}
+.chart .bar span{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);
+  font-size:10.5px;color:var(--dim);white-space:nowrap}
+.chart-wrap{padding-bottom:24px}
+.split{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+form.inline{display:inline}
+</style>
+</head>
+<body>
+<header class="top">
+  <span class="brand">blrd ai</span>
+  <nav>
+    <a href="/admin" class="{{ 'on' if tab=='dash' }}">Статистика</a>
+    <a href="/admin/users" class="{{ 'on' if tab=='users' }}">Пользователи</a>
+    <a href="/admin/promos" class="{{ 'on' if tab=='promos' }}">Промокоды</a>
+    <a href="/admin/broadcasts" class="{{ 'on' if tab=='broadcasts' }}">Рассылки</a>
+    <a href="/admin/payments" class="{{ 'on' if tab=='payments' }}">Платежи</a>
+    <a href="/admin/config" class="{{ 'on' if tab=='config' }}">Модели и тарифы</a>
+    <a href="/admin/settings" class="{{ 'on' if tab=='settings' }}">Настройки</a>
+  </nav>
+  <form method="post" action="/admin/logout"><button class="btn ghost sm">Выйти</button></form>
+</header>
+<main>
+  {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
+  {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+  {% if weak_password %}<div class="flash warn">ADMIN_PASSWORD не изменён — поставьте свой пароль в .env</div>{% endif %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,517 @@
+from __future__ import annotations
+
+import datetime as dt
+import hmac
+import logging
+import uuid
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, Depends, Form, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy import delete, desc, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.admin import broadcast as bc
+from app.admin import stats as stats_svc
+from app.core import energy as energy_svc
+from app.core import settings_store
+from app.core.catalog import catalog
+from app.core.config import settings
+from app.core.db import get_session
+from app.core.models import Broadcast, Chat, Message, Payment, Promo, PromoUse, User, utcnow
+from app.core.security import check_admin_cookie, issue_admin_session, require_admin
+from app.services.notify import send_message
+
+log = logging.getLogger("admin")
+router = APIRouter(prefix="/admin")
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates.env.filters["dtfmt"] = lambda v: v.strftime("%d.%m.%Y %H:%M") if v else "—"
+
+PAGE_SIZE = 50
+
+
+def _render(request: Request, name: str, ctx: dict[str, Any]) -> HTMLResponse:
+    ctx.setdefault("ok", request.query_params.get("ok"))
+    ctx.setdefault("err", request.query_params.get("err"))
+    ctx["request"] = request
+    ctx["weak_password"] = settings.admin_password in ("admin", "change-me", "")
+    try:
+        # Starlette ≥ 0.29: request идёт первым аргументом
+        return templates.TemplateResponse(request, name, ctx)
+    except TypeError:
+        # старые версии принимали только (name, context)
+        return templates.TemplateResponse(name, ctx)
+
+
+
+def _back(url: str, ok: str | None = None, err: str | None = None) -> RedirectResponse:
+    sep = "&" if "?" in url else "?"
+    if ok:
+        url = f"{url}{sep}ok={ok}"
+    elif err:
+        url = f"{url}{sep}err={err}"
+    return RedirectResponse(url, status_code=303)
+
+
+# ── вход ───────────────────────────────────────────────────
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request) -> HTMLResponse:
+    if check_admin_cookie(request.cookies.get("badm")):
+        return RedirectResponse("/admin", status_code=303)
+    return _render(request, "login.html", {})
+
+
+@router.post("/login")
+async def login(request: Request, password: str = Form("")) -> RedirectResponse:
+    if not settings.admin_password or not hmac.compare_digest(
+        password, settings.admin_password
+    ):
+        log.warning("неудачный вход в админку с %s", request.client.host if request.client else "?")
+        return _back("/admin/login", err="Неверный пароль")
+    resp = RedirectResponse("/admin", status_code=303)
+    resp.set_cookie(
+        "badm", issue_admin_session("admin"),
+        max_age=12 * 3600, httponly=True, samesite="lax",
+        secure=settings.webapp_url.startswith("https://"),
+    )
+    return resp
+
+
+@router.post("/logout")
+async def logout() -> RedirectResponse:
+    resp = RedirectResponse("/admin/login", status_code=303)
+    resp.delete_cookie("badm")
+    return resp
+
+
+# ── дашборд ────────────────────────────────────────────────
+@router.get("", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
+async def dashboard(
+    request: Request,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    data = await stats_svc.dashboard(session)
+    maint, maint_text = await settings_store.maintenance(session)
+    return _render(request, "dashboard.html", {
+        "s": data, "maintenance": maint, "maintenance_text": maint_text, "tab": "dash",
+    })
+
+
+# ── пользователи ───────────────────────────────────────────
+@router.get("/users", response_class=HTMLResponse)
+async def users_page(
+    request: Request,
+    q: str = "",
+    plan: str = "",
+    page: int = 1,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    page = max(1, page)
+    query = select(User)
+    if q.strip():
+        term = f"%{q.strip().lower()}%"
+        conds = [
+            func.lower(func.coalesce(User.username, "")).like(term),
+            func.lower(func.coalesce(User.first_name, "")).like(term),
+            func.lower(func.coalesce(User.last_name, "")).like(term),
+        ]
+        if q.strip().isdigit():
+            conds.append(User.id == int(q.strip()))
+        query = query.where(or_(*conds))
+    now = utcnow()
+    if plan == "pro":
+        query = query.where(User.plan == "pro", (User.plan_until == None) | (User.plan_until > now))  # noqa: E711
+    elif plan == "free":
+        query = query.where((User.plan != "pro") | ((User.plan_until != None) & (User.plan_until <= now)))  # noqa: E711
+    elif plan == "banned":
+        query = query.where(User.is_banned == True)  # noqa: E712
+
+    total = await session.scalar(
+        select(func.count()).select_from(query.subquery())
+    ) or 0
+    rows = await session.execute(
+        query.order_by(desc(User.last_seen)).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
+    )
+    users = list(rows.scalars())
+
+    return _render(request, "users.html", {
+        "users": users,
+        "energy": {u.id: energy_svc.energy_display(u.energy_tokens) for u in users},
+        "q": q, "plan": plan, "page": page,
+        "pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
+        "total": total, "tab": "users",
+    })
+
+
+@router.get("/users/{user_id}", response_class=HTMLResponse)
+async def user_page(
+    user_id: int,
+    request: Request,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    data = await stats_svc.user_detail(session, user_id)
+    if data is None:
+        return _back("/admin/users", err="Пользователь не найден")
+    data["tab"] = "users"
+    data["models"] = catalog.models()
+    return _render(request, "user.html", data)
+
+
+@router.post("/users/{user_id}/action")
+async def user_action(
+    user_id: int,
+    request: Request,
+    action: str = Form(...),
+    value: str = Form(""),
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    user = await session.get(User, user_id)
+    if user is None:
+        return _back("/admin/users", err="Пользователь не найден")
+    url = f"/admin/users/{user_id}"
+
+    if action == "ban":
+        user.is_banned = True
+        user.ban_reason = value.strip()[:512] or "Доступ закрыт администратором"
+        await send_message(user_id, f"⛔️ <b>Доступ закрыт</b>\n{user.ban_reason}")
+        return _back(url, ok="Пользователь заблокирован")
+
+    if action == "unban":
+        user.is_banned = False
+        user.ban_reason = None
+        await send_message(user_id, "✅ Доступ восстановлен.")
+        return _back(url, ok="Блокировка снята")
+
+    if action == "grant_pro":
+        days = int(value) if value.strip().isdigit() else (catalog.pro().days or 30)
+        energy_svc.grant_pro(user, days)
+        await send_message(
+            user_id,
+            f"🎁 <b>Pro активирован</b> на {days} дней.\n"
+            f"Начислено {catalog.pro().energy} энергии.",
+        )
+        return _back(url, ok=f"Pro выдан на {days} дней")
+
+    if action == "revoke_pro":
+        user.plan = "free"
+        user.plan_until = None
+        user.energy_tokens = energy_svc.plan_quota_base("free")
+        user.refill_at = utcnow() + dt.timedelta(days=catalog.plan("free").refill_days or 30)
+        return _back(url, ok="Pro снят")
+
+    if action == "add_energy":
+        try:
+            amount = float(value.replace(",", "."))
+        except ValueError:
+            return _back(url, err="Введите число")
+        energy_svc.add_energy(user, amount)
+        if amount > 0:
+            await send_message(user_id, f"⚡️ Начислено {amount:g} энергии.")
+        return _back(url, ok=f"Энергия изменена на {amount:g}")
+
+    if action == "reset_energy":
+        user.energy_tokens = energy_svc.plan_quota_base("pro" if user.is_pro else "free")
+        return _back(url, ok="Баланс сброшен к квоте тарифа")
+
+    if action == "message":
+        text = value.strip()
+        if not text:
+            return _back(url, err="Пустое сообщение")
+        delivered = await send_message(user_id, text)
+        return _back(url, ok="Сообщение отправлено") if delivered else _back(
+            url, err="Telegram не принял сообщение (возможно, бот заблокирован)"
+        )
+
+    if action == "set_model":
+        m = catalog.get(value)
+        if m is None:
+            return _back(url, err="Модель не найдена")
+        user.current_model = m.path
+        return _back(url, ok=f"Модель: {m.name}")
+
+    if action == "make_admin":
+        user.is_admin = not user.is_admin
+        return _back(url, ok="Права администратора изменены")
+
+    if action == "wipe_chats":
+        chat_ids = (
+            await session.execute(select(Chat.id).where(Chat.user_id == user_id))
+        ).scalars().all()
+        if chat_ids:
+            await session.execute(delete(Message).where(Message.chat_id.in_(chat_ids)))
+            await session.execute(delete(Chat).where(Chat.id.in_(chat_ids)))
+        return _back(url, ok="Чаты удалены")
+
+    if action == "delete":
+        if value.strip() != str(user_id):
+            return _back(url, err="Для удаления введите ID пользователя в поле подтверждения")
+        chat_ids = (
+            await session.execute(select(Chat.id).where(Chat.user_id == user_id))
+        ).scalars().all()
+        if chat_ids:
+            await session.execute(delete(Message).where(Message.chat_id.in_(chat_ids)))
+            await session.execute(delete(Chat).where(Chat.id.in_(chat_ids)))
+        await session.execute(delete(PromoUse).where(PromoUse.user_id == user_id))
+        await session.delete(user)
+        log.warning("удалён пользователь %s", user_id)
+        return _back("/admin/users", ok="Пользователь удалён")
+
+    return _back(url, err="Неизвестное действие")
+
+
+# ── промокоды ──────────────────────────────────────────────
+@router.get("/promos", response_class=HTMLResponse)
+async def promos_page(
+    request: Request,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    rows = await session.execute(select(Promo).order_by(Promo.id.desc()).limit(200))
+    return _render(request, "promos.html", {
+        "promos": list(rows.scalars()), "pro": catalog.pro(), "tab": "promos",
+    })
+
+
+@router.post("/promos")
+async def promo_create(
+    code: str = Form(""),
+    kind: str = Form("pro"),
+    days: int = Form(30),
+    energy: int = Form(0),
+    max_uses: int = Form(1),
+    expires_days: int = Form(0),
+    comment: str = Form(""),
+    count: int = Form(1),
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    count = max(1, min(count, 200))
+    expires = utcnow() + dt.timedelta(days=expires_days) if expires_days > 0 else None
+    created: list[str] = []
+
+    for i in range(count):
+        value = (code.strip().upper() if count == 1 and code.strip()
+                 else f"{(code.strip().upper() or 'PRO')}-{uuid.uuid4().hex[:6].upper()}")
+        exists = await session.scalar(select(Promo.id).where(Promo.code == value))
+        if exists:
+            if count == 1:
+                return _back("/admin/promos", err="Такой промокод уже есть")
+            continue
+        session.add(Promo(
+            code=value, kind=kind, days=max(1, days), energy=max(0, energy),
+            max_uses=max(0, max_uses), expires_at=expires, comment=comment.strip()[:200] or None,
+        ))
+        created.append(value)
+
+    await session.flush()
+    return _back("/admin/promos", ok=f"Создано: {len(created)}")
+
+
+@router.post("/promos/{promo_id}/toggle")
+async def promo_toggle(
+    promo_id: int,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    promo = await session.get(Promo, promo_id)
+    if promo is None:
+        return _back("/admin/promos", err="Промокод не найден")
+    promo.is_active = not promo.is_active
+    return _back("/admin/promos", ok="Статус изменён")
+
+
+@router.post("/promos/{promo_id}/delete")
+async def promo_delete(
+    promo_id: int,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    promo = await session.get(Promo, promo_id)
+    if promo is None:
+        return _back("/admin/promos", err="Промокод не найден")
+    await session.execute(delete(PromoUse).where(PromoUse.promo_id == promo_id))
+    await session.delete(promo)
+    return _back("/admin/promos", ok="Промокод удалён")
+
+
+# ── рассылки ───────────────────────────────────────────────
+@router.get("/broadcasts", response_class=HTMLResponse)
+async def broadcasts_page(
+    request: Request,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    rows = await session.execute(select(Broadcast).order_by(Broadcast.id.desc()).limit(50))
+    counts = {
+        a: len(await bc.audience_ids(session, a)) for a in ("all", "pro", "free", "active")
+    }
+    return _render(request, "broadcasts.html", {
+        "items": list(rows.scalars()), "counts": counts, "tab": "broadcasts",
+    })
+
+
+@router.post("/broadcasts")
+async def broadcast_create(
+    text: str = Form(""),
+    audience: str = Form("all"),
+    photo: UploadFile | None = File(None),
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    text = text.strip()
+    rel_path: str | None = None
+
+    if photo is not None and photo.filename:
+        data = await photo.read()
+        if len(data) > 10 * 1024 * 1024:
+            return _back("/admin/broadcasts", err="Картинка больше 10 МБ")
+        suffix = Path(photo.filename).suffix.lower() or ".jpg"
+        if suffix not in (".jpg", ".jpeg", ".png", ".webp"):
+            return _back("/admin/broadcasts", err="Поддерживаются JPG, PNG, WEBP")
+        name = f"{uuid.uuid4().hex}{suffix}"
+        (bc.photos_dir() / name).write_bytes(data)
+        rel_path = str(Path("broadcasts") / name)
+
+    if not text and not rel_path:
+        return _back("/admin/broadcasts", err="Добавьте текст или картинку")
+    if rel_path and len(text) > bc.CAPTION_LIMIT:
+        return _back("/admin/broadcasts",
+                     err=f"С картинкой текст не длиннее {bc.CAPTION_LIMIT} символов")
+
+    item = await bc.enqueue(session, text=text, audience=audience, photo_path=rel_path)
+    return _back("/admin/broadcasts", ok=f"В очереди: {item.total} получателей")
+
+
+@router.post("/broadcasts/{item_id}/cancel")
+async def broadcast_cancel(
+    item_id: int,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    item = await session.get(Broadcast, item_id)
+    if item is None:
+        return _back("/admin/broadcasts", err="Рассылка не найдена")
+    if item.status != "queued":
+        return _back("/admin/broadcasts", err="Отменить можно только то, что ещё не началось")
+    item.status = "failed"
+    item.finished_at = utcnow()
+    return _back("/admin/broadcasts", ok="Рассылка отменена")
+
+
+# ── платежи ────────────────────────────────────────────────
+@router.get("/payments", response_class=HTMLResponse)
+async def payments_page(
+    request: Request,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    rows = await session.execute(
+        select(Payment, User).join(User, User.id == Payment.user_id)
+        .order_by(Payment.id.desc()).limit(200)
+    )
+    return _render(request, "payments.html", {"rows": rows.all(), "tab": "payments"})
+
+
+@router.post("/payments/{payment_id}/confirm")
+async def payment_confirm(
+    payment_id: int,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    """Выдать Pro вручную, если колбэк потерялся, а деньги пришли."""
+    payment = await session.get(Payment, payment_id)
+    if payment is None:
+        return _back("/admin/payments", err="Платёж не найден")
+    if payment.applied:
+        return _back("/admin/payments", err="Уже выдано")
+    user = await session.get(User, payment.user_id)
+    if user is None:
+        return _back("/admin/payments", err="Пользователь не найден")
+    energy_svc.grant_pro(user, payment.days)
+    user.paid_total = (user.paid_total or 0) + int(payment.amount)
+    payment.applied = True
+    payment.status = "CONFIRMED"
+    payment.paid_at = utcnow()
+    await send_message(user.id, f"✅ <b>Pro активирован</b> на {payment.days} дней.")
+    log.warning("платёж %s подтверждён вручную", payment_id)
+    return _back("/admin/payments", ok="Pro выдан вручную")
+
+
+# ── настройки ──────────────────────────────────────────────
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(
+    request: Request,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    maint = await settings_store.get(session, "maintenance") or {}
+    welcome = await settings_store.get(session, "welcome") or {}
+    rate = await settings_store.get(session, "rate_limit") or {}
+    return _render(request, "settings.html", {
+        "maint": maint, "welcome": welcome, "rate": rate,
+        "cfg": {
+            "webapp_url": settings.webapp_url,
+            "anymodel": bool(settings.anymodel_api_key),
+            "platega": bool(settings.platega_merchant_id and settings.platega_secret),
+            "callback": settings.callback_url,
+            "admins": settings.admin_ids,
+            "db": settings.database_url.split("://")[0],
+            "unit": catalog.energy_unit,
+        },
+        "tab": "settings",
+    })
+
+
+@router.post("/settings")
+async def settings_save(
+    maintenance: str = Form(""),
+    maintenance_message: str = Form(""),
+    welcome_text: str = Form(""),
+    per_minute: int = Form(20),
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    await settings_store.put(session, "maintenance", {
+        "enabled": maintenance == "on",
+        "message": maintenance_message.strip() or "Идут технические работы, скоро вернёмся.",
+    })
+    await settings_store.put(session, "welcome", {"text": welcome_text.strip()})
+    await settings_store.put(session, "rate_limit", {"per_minute": max(1, min(per_minute, 300))})
+    return _back("/admin/settings", ok="Настройки сохранены")
+
+
+# ── конфиги моделей и тарифов ──────────────────────────────
+@router.get("/config", response_class=HTMLResponse)
+async def config_page(
+    request: Request, _: bool = Depends(require_admin)
+) -> HTMLResponse:
+    return _render(request, "config.html", {
+        "models_text": catalog.raw_text("models"),
+        "plans_text": catalog.raw_text("plans"),
+        "models": catalog.models(),
+        "plans": catalog.plans(),
+        "tab": "config",
+    })
+
+
+@router.post("/config")
+async def config_save(
+    which: str = Form(...),
+    text: str = Form(...),
+    _: bool = Depends(require_admin),
+) -> RedirectResponse:
+    if which not in ("models", "plans"):
+        return _back("/admin/config", err="Неизвестный файл")
+    try:
+        catalog.save_text(which, text)
+    except Exception as e:
+        return _back("/admin/config", err=f"YAML не сохранён: {e}")
+    log.info("конфиг %s обновлён из админки", which)
+    return _back("/admin/config", ok=f"{which}.yml сохранён, изменения применены")

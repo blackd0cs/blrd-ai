@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Промокоды{% endblock %}
+{% block body %}
+<h1>Промокоды</h1>
+
+<div class="card">
+  <h2 style="margin-top:0">Создать</h2>
+  <form method="post" action="/admin/promos">
+    <div class="row">
+      <div><label>Код (пусто — сгенерируем)</label><input name="code" placeholder="NOVEMBER" /></div>
+      <div><label>Тип</label><select name="kind">
+        <option value="pro">Подписка Pro</option>
+        <option value="energy">Энергия</option>
+      </select></div>
+      <div><label>Дней Pro</label><input name="days" value="{{ pro.days or 30 }}" /></div>
+      <div><label>Энергии (для типа «энергия»)</label><input name="energy" value="0" /></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Активаций всего (0 — без лимита)</label><input name="max_uses" value="1" /></div>
+      <div><label>Срок жизни, дней (0 — бессрочно)</label><input name="expires_days" value="0" /></div>
+      <div><label>Сколько кодов создать</label><input name="count" value="1" /></div>
+      <div><label>Комментарий</label><input name="comment" placeholder="для блогера" /></div>
+      <div style="flex:0"><button class="btn">Создать</button></div>
+    </div>
+    <p class="dim" style="margin:12px 0 0">Один пользователь активирует код только один раз. При создании нескольких кодов к введённому префиксу добавляется случайный хвост.</p>
+  </form>
+</div>
+
+<div class="card">
+  <div class="tbl-wrap"><table>
+    <tr><th>Код</th><th>Что даёт</th><th>Использован</th><th>Действует до</th><th>Комментарий</th><th></th></tr>
+    {% for p in promos %}
+      <tr>
+        <td class="mono">{{ p.code }}
+          {% if not p.is_active %}<span class="tag free">выключен</span>{% endif %}</td>
+        <td>{% if p.kind == 'pro' %}Pro на {{ p.days }} дн.{% else %}{{ p.energy }} энергии{% endif %}</td>
+        <td>{{ p.used }}{% if p.max_uses %} из {{ p.max_uses }}{% else %} / ∞{% endif %}</td>
+        <td class="dim">{{ p.expires_at|dtfmt }}</td>
+        <td class="dim">{{ p.comment or '—' }}</td>
+        <td>
+          <form class="inline" method="post" action="/admin/promos/{{ p.id }}/toggle">
+            <button class="btn ghost sm">{{ 'Выключить' if p.is_active else 'Включить' }}</button></form>
+          <form class="inline" method="post" action="/admin/promos/{{ p.id }}/delete">
+            <button class="btn danger sm">Удалить</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="dim">Промокодов пока нет</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endblock %}

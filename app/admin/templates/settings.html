@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block body %}
+<h1>Настройки</h1>
+
+<div class="grid c2">
+  <div class="card">
+    <h2 style="margin-top:0">Работа сервиса</h2>
+    <form method="post" action="/admin/settings">
+      <div class="field">
+        <label>Технические работы</label>
+        <select name="maintenance">
+          <option value="off" {{ 'selected' if not maint.enabled }}>Выключены</option>
+          <option value="on" {{ 'selected' if maint.enabled }}>Включены — доступ только админам</option>
+        </select>
+      </div>
+      <div class="field"><label>Текст для пользователей</label>
+        <input name="maintenance_message" value="{{ maint.message or '' }}" /></div>
+      <div class="field"><label>Приветствие в боте (/start)</label>
+        <textarea name="welcome_text" rows="4">{{ welcome.text or '' }}</textarea></div>
+      <div class="field"><label>Лимит запросов на пользователя в минуту</label>
+        <input name="per_minute" value="{{ rate.per_minute or 20 }}" /></div>
+      <button class="btn">Сохранить</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Окружение</h2>
+    <table>
+      <tr><td class="dim">WEBAPP_URL</td><td class="mono">{{ cfg.webapp_url }}</td></tr>
+      <tr><td class="dim">AnyModel</td>
+        <td>{% if cfg.anymodel %}<span class="tag pro">ключ задан</span>{% else %}<span class="tag ban">ключа нет</span>{% endif %}</td></tr>
+      <tr><td class="dim">Platega</td>
+        <td>{% if cfg.platega %}<span class="tag pro">настроена</span>{% else %}<span class="tag ban">не настроена</span>{% endif %}</td></tr>
+      <tr><td class="dim">Callback URL</td><td class="mono">{{ cfg.callback }}</td></tr>
+      <tr><td class="dim">База</td><td class="mono">{{ cfg.db }}</td></tr>
+      <tr><td class="dim">Админы (ADMIN_IDS)</td><td class="mono">{{ cfg.admins or '—' }}</td></tr>
+      <tr><td class="dim">1 энергия</td><td>{{ cfg.unit }} базовых токенов</td></tr>
+    </table>
+    <p class="dim" style="margin:14px 0 0">Это значения из .env, меняются только там и требуют перезапуска. Callback URL впишите в кабинете Platega.</p>
+  </div>
+</div>
+{% endblock %}

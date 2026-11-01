@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Рассылки{% endblock %}
+{% block body %}
+<h1>Рассылки</h1>
+
+<div class="card">
+  <h2 style="margin-top:0">Новая рассылка</h2>
+  <form method="post" action="/admin/broadcasts" enctype="multipart/form-data">
+    <div class="field">
+      <label>Текст (HTML: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;, &lt;a href&gt;)</label>
+      <textarea name="text" rows="5" placeholder="Привет! Добавили новую модель…"></textarea>
+    </div>
+    <div class="row">
+      <div><label>Кому</label>
+        <select name="audience">
+          <option value="all">Всем — {{ counts.all }}</option>
+          <option value="active">Активным за 7 дней — {{ counts.active }}</option>
+          <option value="pro">Только Pro — {{ counts.pro }}</option>
+          <option value="free">Только Free — {{ counts.free }}</option>
+        </select></div>
+      <div><label>Картинка (необязательно)</label><input type="file" name="photo" accept="image/*" /></div>
+      <div style="flex:0"><button class="btn">Поставить в очередь</button></div>
+    </div>
+    <p class="dim" style="margin:12px 0 0">С картинкой текст идёт подписью, лимит 1024 символа. Отправляет процесс бота, примерно 16 сообщений в секунду. Отменить можно только до начала.</p>
+  </form>
+</div>
+
+<div class="card">
+  <div class="tbl-wrap"><table>
+    <tr><th>Создана</th><th>Аудитория</th><th>Текст</th><th>Статус</th><th>Отправлено</th><th></th></tr>
+    {% for b in items %}
+      <tr>
+        <td class="dim">{{ b.created_at|dtfmt }}</td>
+        <td>{{ b.audience }}</td>
+        <td>{% if b.photo_path %}🖼 {% endif %}{{ (b.text or '')[:70] }}{{ '…' if (b.text or '')|length > 70 }}</td>
+        <td>
+          {% if b.status == 'done' %}<span class="tag pro">готово</span>
+          {% elif b.status == 'running' %}<span class="tag adm">идёт</span>
+          {% elif b.status == 'failed' %}<span class="tag ban">отменена</span>
+          {% else %}<span class="tag free">в очереди</span>{% endif %}
+        </td>
+        <td>{{ b.sent }} / {{ b.total }}{% if b.failed %} <span class="dim">(ошибок {{ b.failed }})</span>{% endif %}</td>
+        <td>{% if b.status == 'queued' %}
+          <form class="inline" method="post" action="/admin/broadcasts/{{ b.id }}/cancel">
+            <button class="btn ghost sm">Отменить</button></form>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="dim">Рассылок пока не было</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endblock %}

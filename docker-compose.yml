@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: blrd
+      POSTGRES_USER: blrd
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-blrd-dev}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "blrd"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://blrd:${DB_PASSWORD:-blrd-dev}@db:5432/blrd
+      BOT_TOKEN: ${BOT_TOKEN}
+      BOT_USERNAME: ${BOT_USERNAME}
+      WEBAPP_URL: ${WEBAPP_URL}
+      ANYMODEL_API_KEY: ${ANYMODEL_API_KEY}
+      PLATEGA_MERCHANT_ID: ${PLATEGA_MERCHANT_ID}
+      PLATEGA_SECRET: ${PLATEGA_SECRET}
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_IDS: ${ADMIN_IDS}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    ports:
+      - "8080:8080"
+    networks:
+      - app
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+
+networks:
+  app:

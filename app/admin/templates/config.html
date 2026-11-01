@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Модели и тарифы{% endblock %}
+{% block body %}
+<h1>Модели и тарифы</h1>
+
+<div class="card">
+  <div class="tbl-wrap"><table>
+    <tr><th>Модель</th><th>Путь API</th><th>Коэффициент</th><th>Тарифы</th><th>Возможности</th></tr>
+    {% for m in models %}
+      <tr><td>{{ m.name }}</td><td class="mono">{{ m.path }}</td>
+        <td>{{ 'бесплатно' if m.multiplier == 0 else '×' ~ m.multiplier }}</td>
+        <td>{{ m.plans|join(', ') }}</td>
+        <td class="dim">{% if m.vision %}картинки{% endif %}
+          {% if m.reasoning %}· рассуждения{% endif %}
+          {% if m.web_search %}· веб-поиск{% endif %}
+          {% if m.default %}· по умолчанию{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+
+<div class="grid c2">
+  <div class="card">
+    <h2 style="margin-top:0">models.yml</h2>
+    <form method="post" action="/admin/config">
+      <input type="hidden" name="which" value="models" />
+      <div class="field"><textarea name="text" rows="26">{{ models_text }}</textarea></div>
+      <button class="btn">Сохранить models.yml</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">plans.yml</h2>
+    <form method="post" action="/admin/config">
+      <input type="hidden" name="which" value="plans" />
+      <div class="field"><textarea name="text" rows="26">{{ plans_text }}</textarea></div>
+      <button class="btn">Сохранить plans.yml</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <p class="dim" style="margin:0">Файл сохраняется только если YAML разбирается и содержит нужный корневой ключ; предыдущая версия остаётся рядом как <span class="mono">.bak</span>. Изменения применяются сразу, перезапуск не нужен. Путь модели должен совпадать с id из каталога AnyModel: <span class="mono">GET /v1/models</span>.</p>
+</div>
+{% endblock %}

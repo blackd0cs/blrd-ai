@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Платежи{% endblock %}
+{% block body %}
+<h1>Платежи</h1>
+<div class="card">
+  <div class="tbl-wrap"><table>
+    <tr><th>Создан</th><th>Пользователь</th><th>Сумма</th><th>Статус</th>
+      <th>Транзакция</th><th>Оплачен</th><th></th></tr>
+    {% for p, u in rows %}
+      <tr>
+        <td class="dim">{{ p.created_at|dtfmt }}</td>
+        <td><a href="/admin/users/{{ u.id }}">{{ u.display_name }}</a>
+          <div class="dim mono">{{ u.id }}</div></td>
+        <td>{{ p.amount }} {{ p.currency }}</td>
+        <td>{% if p.applied %}<span class="tag pro">выдано</span>
+            {% elif p.status == 'PENDING' %}<span class="tag free">ожидание</span>
+            {% else %}<span class="tag ban">{{ p.status }}</span>{% endif %}</td>
+        <td class="mono dim">{{ p.tx_id or '—' }}</td>
+        <td class="dim">{{ p.paid_at|dtfmt }}</td>
+        <td>
+          {% if not p.applied %}
+            <form class="inline" method="post" action="/admin/payments/{{ p.id }}/confirm">
+              <button class="btn ghost sm">Выдать вручную</button></form>
+          {% endif %}
+          {% if p.pay_url %}<a class="btn ghost sm" href="{{ p.pay_url }}" target="_blank" rel="noopener">Ссылка</a>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="dim">Платежей пока нет</td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="dim" style="margin:14px 0 0">«Выдать вручную» нужно только если деньги пришли, а колбэк Platega не дошёл. Проверьте платёж в кабинете Platega перед выдачей.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,66 @@
+# path        — id модели в AnyModel (как в GET /v1/models, с префиксом провайдера)
+# name        — что видит пользователь
+# multiplier  — коэффициент базовых токенов (0 = бесплатно)
+# plans       — тарифы, которым модель доступна
+# vision      — принимает изображения
+# reasoning   — показывать статус «рассуждает»
+# web_search  — разрешить встроенный веб-поиск провайдера
+# default     — модель по умолчанию для тарифа
+
+models:
+  - path: "Qwen3.8 Max"
+    name: "qwen/qwen3.8-max"
+    short: "Qwen"
+    multiplier: 0
+    plans: [free, pro]
+    vision: false
+    reasoning: false
+    web_search: false
+    context: 128000
+    default: true
+
+  - path: "ag/gemini-3.1-flash-lite-preview"
+    name: "Gemini 3.1 Flash-Lite"
+    short: "Gemini"
+    multiplier: 0.25
+    plans: [free, pro]
+    vision: false
+    reasoning: true
+    web_search: false
+    context: 128000
+
+  - path: "gcli/grok-4.7"
+    name: "Grok 4.7"
+    short: "Grok"
+    multiplier: 1.5
+    plans: [pro]
+    vision: true
+    reasoning: true
+    web_search: true
+    context: 400000
+
+  - path: "cc/claude-opus-5"
+    name: "Claude Opus 5"
+    short: "Opus 5"
+    multiplier: 2.5
+    plans: [pro]
+    vision: true
+    reasoning: true
+    web_search: true
+    context: 200000
+
+  - path: "cx/gpt-5.6-terra"
+    name: "GPT-5.6 Terra"
+    short: "GPT-5.6"
+    multiplier: 1
+    plans: [pro]
+    vision: true
+    reasoning: true
+    web_search: true
+    context: 1000000
+
+# Системный промпт для всех моделей; {model_name} подставляется
+system_prompt: |
+  Ты — ассистент blrd ai. Отвечай на языке пользователя.
+  Используй Markdown: **жирный**, списки, таблицы, ``` для кода с указанием языка.
+  Будь точным и кратким, не выдумывай факты.

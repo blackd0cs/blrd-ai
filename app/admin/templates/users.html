@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Пользователи{% endblock %}
+{% block body %}
+<h1>Пользователи <span class="dim">· {{ total }}</span></h1>
+
+<div class="card">
+  <form method="get" action="/admin/users" class="row">
+    <div><label>Поиск</label><input name="q" value="{{ q }}" placeholder="ID, имя или @username" /></div>
+    <div><label>Тариф</label>
+      <select name="plan">
+        <option value="" {{ 'selected' if not plan }}>Все</option>
+        <option value="pro" {{ 'selected' if plan=='pro' }}>Pro</option>
+        <option value="free" {{ 'selected' if plan=='free' }}>Free</option>
+        <option value="banned" {{ 'selected' if plan=='banned' }}>Забаненные</option>
+      </select></div>
+    <div style="flex:0"><button class="btn">Найти</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="tbl-wrap"><table>
+    <tr><th>Пользователь</th><th>Тариф</th><th>Энергия</th><th>Запросов</th>
+      <th>Оплачено</th><th>Был</th><th></th></tr>
+    {% for u in users %}
+      <tr>
+        <td><a href="/admin/users/{{ u.id }}">{{ u.display_name }}</a>
+          {% if u.is_admin %}<span class="tag adm">admin</span>{% endif %}
+          <div class="dim mono">{{ u.id }}{% if u.username %} · @{{ u.username }}{% endif %}</div></td>
+        <td>
+          {% if u.is_banned %}<span class="tag ban">бан</span>
+          {% elif u.is_pro %}<span class="tag pro">Pro</span>
+          {% else %}<span class="tag free">Free</span>{% endif %}
+          {% if u.is_pro and u.plan_until %}<div class="dim">до {{ u.plan_until|dtfmt }}</div>{% endif %}
+        </td>
+        <td>{{ energy[u.id] }}</td>
+        <td>{{ u.requests or 0 }}</td>
+        <td>{{ u.paid_total or 0 }} ₽</td>
+        <td class="dim">{{ u.last_seen|dtfmt }}</td>
+        <td><a class="btn ghost sm" href="/admin/users/{{ u.id }}">Открыть</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="dim">Ничего не найдено</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+
+{% if pages > 1 %}
+<div class="card split">
+  <span class="dim">Страница {{ page }} из {{ pages }}</span>
+  <span>
+    {% if page > 1 %}<a class="btn ghost sm" href="/admin/users?q={{ q }}&plan={{ plan }}&page={{ page-1 }}">Назад</a>{% endif %}
+    {% if page < pages %}<a class="btn ghost sm" href="/admin/users?q={{ q }}&plan={{ plan }}&page={{ page+1 }}">Вперёд</a>{% endif %}
+  </span>
+</div>
+{% endif %}
+{% endblock %}
