@@ -96,8 +96,26 @@ async def dashboard(
 ) -> HTMLResponse:
     data = await stats_svc.dashboard(session)
     maint, maint_text = await settings_store.maintenance(session)
+
+    users = data["users"]
+    plan_donut = stats_svc.donut(
+        [("Pro", users["pro"]), ("Free", max(0, users["total"] - users["pro"]))],
+        ["#3ddc84", "#3a3a44"],
+    )
+    src = data["by_source"]
+    source_donut = stats_svc.donut(
+        [("Бот", src.get("bot", 0)), ("Веб", src.get("web", 0))],
+        ["#5b9dff", "#9b6cff"],
+    )
+    top = data["by_model"][:6]
+    peak = max((m["requests"] for m in top), default=1) or 1
+    for m in top:
+        m["width"] = round(m["requests"] / peak * 100)
+
     return _render(request, "dashboard.html", {
-        "s": data, "maintenance": maint, "maintenance_text": maint_text, "tab": "dash",
+        "s": data, "maintenance": maint, "maintenance_text": maint_text,
+        "plan_donut": plan_donut, "source_donut": source_donut, "top_models": top,
+        "tab": "dash",
     })
 
 
@@ -264,6 +282,50 @@ async def user_action(
         return _back("/admin/users", ok="Пользователь удалён")
 
     return _back(url, err="Неизвестное действие")
+
+
+# ── чаты пользователей ─────────────────────────────────────
+@router.get("/chats", response_class=HTMLResponse)
+async def chats_page(
+    request: Request,
+    user_id: int | None = None,
+    page: int = 1,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    data = await stats_svc.chats_page(session, user_id=user_id, page=max(1, page))
+    owner = await session.get(User, user_id) if user_id else None
+    data.update({"tab": "chats", "owner": owner, "user_id": user_id})
+    return _render(request, "chats.html", data)
+
+
+@router.get("/chats/{chat_id}", response_class=HTMLResponse)
+async def chat_view(
+    chat_id: int,
+    request: Request,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    data = await stats_svc.chat_detail(session, chat_id)
+    if data is None:
+        return _back("/admin/chats", err="Чат не найден")
+    data["tab"] = "chats"
+    return _render(request, "chat.html", data)
+
+
+@router.post("/chats/{chat_id}/delete")
+async def chat_delete(
+    chat_id: int,
+    _: bool = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    chat = await session.get(Chat, chat_id)
+    if chat is None:
+        return _back("/admin/chats", err="Чат не найден")
+    uid = chat.user_id
+    await session.execute(delete(Message).where(Message.chat_id == chat_id))
+    await session.delete(chat)
+    return _back(f"/admin/chats?user_id={uid}", ok="Чат удалён")
 
 
 # ── промокоды ──────────────────────────────────────────────
@@ -454,8 +516,9 @@ async def settings_page(
     maint = await settings_store.get(session, "maintenance") or {}
     welcome = await settings_store.get(session, "welcome") or {}
     rate = await settings_store.get(session, "rate_limit") or {}
+    links = await settings_store.links(session)
     return _render(request, "settings.html", {
-        "maint": maint, "welcome": welcome, "rate": rate,
+        "maint": maint, "welcome": welcome, "rate": rate, "links": links,
         "cfg": {
             "webapp_url": settings.webapp_url,
             "anymodel": bool(settings.anymodel_api_key),
@@ -475,6 +538,9 @@ async def settings_save(
     maintenance_message: str = Form(""),
     welcome_text: str = Form(""),
     per_minute: int = Form(20),
+    support_url: str = Form(""),
+    share_text: str = Form(""),
+    bot_username: str = Form(""),
     _: bool = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
@@ -484,6 +550,11 @@ async def settings_save(
     })
     await settings_store.put(session, "welcome", {"text": welcome_text.strip()})
     await settings_store.put(session, "rate_limit", {"per_minute": max(1, min(per_minute, 300))})
+    await settings_store.put(session, "links", {
+        "support_url": support_url.strip(),
+        "share_text": share_text.strip(),
+        "bot_username": bot_username.strip().lstrip("@"),
+    })
     return _back("/admin/settings", ok="Настройки сохранены")
 
 

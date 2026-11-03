@@ -95,6 +95,14 @@ async def me(
     off, text = await settings_store.maintenance(session)
     return {"user": _me(user), "maintenance": {"enabled": off, "message": text}}
 
+@router.get("/config")
+async def public_config(
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    data = await settings_store.links(session)
+    data["app_name"] = "БЕЛЕБАЛАРДЫХ AI"
+    return data
 
 # ── модели и тарифы ────────────────────────────────────────
 @router.get("/models")
@@ -240,20 +248,13 @@ async def delete_chat(
 
 
 # ── генерация (SSE) ────────────────────────────────────────
-@router.post("/chats/{chat_id}/send")
-async def send(
-    chat_id: int,
-    body: SendIn,
-    request: Request,
-    user: User = Depends(current_user),
-    session: AsyncSession = Depends(get_session),
-) -> StreamingResponse:
+async def _guard_generation(
+    request: Request, user: User, session: AsyncSession
+) -> None:
+    """Проверки, общие для первой генерации и перегенерации."""
     off, text = await settings_store.maintenance(session)
     if off and not user.is_admin:
         raise HTTPException(503, text or "Идут технические работы")
-
-    if not body.text.strip() and not body.attachments:
-        raise HTTPException(400, "Пустой запрос")
 
     rl = await settings_store.get(session, "rate_limit") or {}
     if not limiter.check(user.id, int(rl.get("per_minute", 20))):
@@ -263,35 +264,12 @@ async def send(
     if user.id in busy_users:
         raise HTTPException(409, "Предыдущий ответ ещё генерируется")
 
-    atts = [a.model_dump() for a in body.attachments]
-    # проверяем, что вложения принадлежат пользователю
-    if atts:
-        ids = [a["id"] for a in atts]
-        rows = await session.execute(
-            select(Attachment).where(Attachment.id.in_(ids), Attachment.user_id == user.id)
-        )
-        owned = {a.id: a for a in rows.scalars()}
-        if len(owned) != len(ids):
-            raise HTTPException(400, "Вложение не найдено")
-        atts = [
-            {"id": a.id, "kind": a.kind, "name": a.file_name, "mime": a.mime}
-            for a in owned.values()
-        ]
 
-    uid, model_path = user.id, body.model
-    await session.commit()  # освобождаем соединение: стрим живёт долго
-
+def _sse(request: Request, uid: int, **kwargs: Any) -> StreamingResponse:
     async def events():
         busy_users.add(uid)
         try:
-            gen = pipeline.run(
-                user_id=uid,
-                chat_id=chat_id,
-                text=body.text,
-                attachments=atts,
-                source="web",
-                model_path=model_path,
-            )
+            gen = pipeline.run(user_id=uid, **kwargs)
             async for ev in gen:
                 if await request.is_disconnected():
                     await gen.aclose()
@@ -299,7 +277,7 @@ async def send(
                 yield b"data: " + orjson.dumps(ev) + b"\n\n"
         except asyncio.CancelledError:
             raise
-        except Exception as e:  # сюда попадают только баги, не ошибки провайдера
+        except Exception as e:
             log.exception("stream crashed uid=%s", uid)
             yield b"data: " + orjson.dumps(
                 {"type": "error", "message": f"Внутренняя ошибка: {e}", "code": "internal"}
@@ -316,6 +294,66 @@ async def send(
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
+    )
+
+
+@router.post("/chats/{chat_id}/send")
+async def send(
+    chat_id: int,
+    body: SendIn,
+    request: Request,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    await _guard_generation(request, user, session)
+    if not body.text.strip() and not body.attachments:
+        raise HTTPException(400, "Пустой запрос")
+
+    atts = [a.model_dump() for a in body.attachments]
+    if atts:
+        ids = [a["id"] for a in atts]
+        rows = await session.execute(
+            select(Attachment).where(Attachment.id.in_(ids), Attachment.user_id == user.id)
+        )
+        owned = {a.id: a for a in rows.scalars()}
+        if len(owned) != len(ids):
+            raise HTTPException(400, "Вложение не найдено")
+        atts = [
+            {"id": a.id, "kind": a.kind, "name": a.file_name, "mime": a.mime}
+            for a in owned.values()
+        ]
+
+    uid, model_path, text = user.id, body.model, body.text
+    await session.commit()  # стрим живёт долго, соединение освобождаем
+
+    return _sse(
+        request, uid,
+        chat_id=chat_id, text=text, attachments=atts,
+        source="web", model_path=model_path,
+    )
+
+
+@router.post("/chats/{chat_id}/regenerate")
+async def regenerate(
+    chat_id: int,
+    body: ChatIn,
+    request: Request,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    """Удаляет последний ответ модели и генерирует его заново по тому же вопросу."""
+    await _guard_generation(request, user, session)
+
+    chat = await session.get(Chat, chat_id)
+    if chat is None or chat.user_id != user.id or chat.is_deleted:
+        raise HTTPException(404, "Чат не найден")
+
+    uid, model_path = user.id, body.model
+    await session.commit()
+
+    return _sse(
+        request, uid,
+        chat_id=chat_id, source="web", model_path=model_path, regenerate=True,
     )
 
 

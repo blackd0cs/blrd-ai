@@ -13,6 +13,7 @@ def main_menu() -> ReplyKeyboardMarkup:
     rows = [
         [KeyboardButton(text="🧠 Модель"), KeyboardButton(text="⚡ Баланс")],
         [KeyboardButton(text="🆕 Новый чат"), KeyboardButton(text="💎 Pro")],
+        [KeyboardButton(text="🆘 Поддержка")],
     ]
     if settings.webapp_url.startswith("https://"):
         rows.insert(0, [KeyboardButton(
@@ -27,6 +28,26 @@ def webapp_button(text: str = "Открыть приложение") -> InlineKe
         return None
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=text, web_app=WebAppInfo(url=settings.webapp_url))]
+    ])
+
+
+def support_kb(url: str) -> InlineKeyboardMarkup | None:
+    if not url:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🆘 Написать в поддержку", url=url)]
+    ])
+
+
+def share_kb(bot_username: str, text: str) -> InlineKeyboardMarkup | None:
+    if not bot_username:
+        return None
+    link = f"https://t.me/{bot_username}"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="📣 Поделиться ботом",
+            switch_inline_query=f"{text} {link}",
+        )]
     ])
 
 

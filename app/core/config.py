@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     platega_payment_method: int = 2
     platega_callback_secret_check: bool = True
 
+    # ── Ссылки для Mini App и бота (можно переопределить в админке) ──────
+    support_url: str = ""          # https://t.me/your_support
+    share_text: str = ""           # текст при «поделиться ботом»
+
     # ── Приложение ─────────────────────────────────────────
     secret_key: str = "dev-secret-change-me"
     database_url: str = "sqlite+aiosqlite:///./data/blrd.db"
@@ -48,7 +52,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # Локальная отладка: вход в веб без Telegram под этим id.
     # В продакшене оставить 0 — иначе любой получит доступ к аккаунту.
-    dev_auth_id: int = 0
+    dev_auth_id: int = 1
 
     # ── Админка ────────────────────────────────────────────
     admin_password: str = "admin"

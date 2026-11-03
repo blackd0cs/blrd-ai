@@ -1,21 +1,17 @@
 from __future__ import annotations
 
-import datetime as dt
 import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, select
 
 from app.core import energy as energy_svc
 from app.core.catalog import catalog
 from app.core.db import session_scope
 from app.core.models import Chat, Message, User, utcnow
 from app.services import prompt as prompt_svc
-from app.services.anymodel import (
-    PHASE_DONE, AnyModelError, StreamEvent, anymodel,
-)
+from app.services.anymodel import AnyModelError, StreamEvent, anymodel
 
 log = logging.getLogger("pipeline")
 
@@ -31,8 +27,6 @@ PHASE_LABELS = {
 
 
 class GenerationDenied(Exception):
-    """Отказ до обращения к модели: тариф, баланс, техработы, лимит."""
-
     def __init__(self, message: str, *, code: str = "denied"):
         super().__init__(message)
         self.code = code
@@ -55,23 +49,19 @@ async def run(
     *,
     user_id: int,
     chat_id: int,
-    text: str,
+    text: str = "",
     attachments: list[dict[str, Any]] | None = None,
     source: str = "web",
     model_path: str | None = None,
+    regenerate: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """
-    Асинхронный генератор событий:
-      {"type":"phase","phase":...,"label":...}
-      {"type":"delta","text":...} / {"type":"reasoning","text":...}
-      {"type":"citations","items":[...]}
-      {"type":"done","message_id":...,"energy":...,"cost":...,"title":...}
-      {"type":"error","message":...,"code":...}
-    Каждая запись в БД — в своей короткой транзакции, чтобы стрим не держал соединение.
+    Генератор событий SSE. При regenerate=True новое сообщение пользователя
+    не добавляется: удаляются ответы после последнего вопроса и он идёт в модель снова.
     """
     attachments = attachments or []
 
-    # ── подготовка: проверки и запись вопроса ───────────────
+    # ── подготовка ──────────────────────────────────────────
     async with session_scope() as s:
         user = await s.get(User, user_id)
         if user is None:
@@ -88,38 +78,52 @@ async def run(
             return
 
         plan = catalog.plan(user.plan if user.is_pro else "free")
-        model = catalog.get(model_path or chat.model or user.current_model) or catalog.default_model(plan.code)
+        model = catalog.get(model_path or chat.model or user.current_model) \
+            or catalog.default_model(plan.code)
         if not model.allowed_for(plan.code):
             yield _err(f"Модель «{model.name}» доступна в Pro", "need_pro")
-            return
-        if attachments and plan.max_attachments <= 0:
-            yield _err("Вложения доступны в Pro", "need_pro")
-            return
-        if len(attachments) > max(plan.max_attachments, 0):
-            yield _err(f"Не больше {plan.max_attachments} вложений за раз", "too_many")
             return
         if not energy_svc.can_afford(user, model):
             yield _err("Закончилась энергия", "no_energy")
             return
 
+        if not regenerate:
+            if attachments and plan.max_attachments <= 0:
+                yield _err("Вложения доступны в Pro", "need_pro")
+                return
+            if len(attachments) > max(plan.max_attachments, 0):
+                yield _err(f"Не больше {plan.max_attachments} вложений за раз", "too_many")
+                return
+
         chat.model = model.path
         user.current_model = model.path
         chat.updated_at = utcnow()
-
-        question = Message(
-            chat_id=chat.id, role="user", content=text or "",
-            attachments=attachments or None, model=model.path,
-        )
-        s.add(question)
-        await s.flush()
 
         rows = await s.execute(
             select(Message).where(Message.chat_id == chat.id).order_by(Message.id)
         )
         history = list(rows.scalars())
 
+        if regenerate:
+            last_user = next((m for m in reversed(history) if m.role == "user"), None)
+            if last_user is None:
+                yield _err("Нечего перегенерировать", "no_question")
+                return
+            tail = [m.id for m in history if m.id > last_user.id]
+            if tail:
+                await s.execute(delete(Message).where(Message.id.in_(tail)))
+                history = [m for m in history if m.id <= last_user.id]
+        else:
+            question = Message(
+                chat_id=chat.id, role="user", content=text or "",
+                attachments=attachments or None, model=model.path,
+            )
+            s.add(question)
+            await s.flush()
+            history.append(question)
+
         new_title = None
-        if chat.title in ("Новый чат", "", None):
+        if not regenerate and chat.title in ("Новый чат", "", None):
             new_title = prompt_svc.title_from_text(
                 text or (attachments[0]["name"] if attachments else "")
             )
@@ -129,6 +133,8 @@ async def run(
             s, history=history, model=model, context_messages=plan.context_messages
         )
         plan_code, model_path_final = plan.code, model.path
+        web_search = model.web_search and plan.web_search
+        effort = "medium" if model.reasoning else None
 
     yield {"type": "meta", "model": model_path_final, "title": new_title}
 
@@ -142,8 +148,8 @@ async def run(
         stream = anymodel.stream_chat(
             model=model_path_final,
             messages=payload,
-            web_search=model.web_search and plan.web_search,
-            reasoning_effort="medium" if model.reasoning else None,
+            web_search=web_search,
+            reasoning_effort=effort,
             has_images=has_images,
         )
         async for ev in stream:
@@ -165,7 +171,7 @@ async def run(
         log.warning("generation failed uid=%s model=%s: %s", user_id, model_path_final, e)
     except (GeneratorExit, KeyboardInterrupt):
         raise
-    except BaseException as e:  # CancelledError и прочее: сохраняем написанное
+    except BaseException as e:
         res.aborted = True
         log.info("generation aborted uid=%s: %r", user_id, e)
         await _finalize(user_id, chat_id, model_path_final, chunks, think, res, source, plan_code)
@@ -175,7 +181,6 @@ async def run(
     res.reasoning = "".join(think)
 
     if failed is not None and not res.text:
-        # пустой неудачный ответ не стоит пользователю ничего
         async with session_scope() as s:
             user = await s.get(User, user_id)
             if user:
@@ -214,7 +219,7 @@ async def _finalize(
     reasoning = "".join(think)
     model = catalog.get(model_path) or catalog.default_model(plan_code)
 
-    if not res.tokens_out and text:  # провайдер не прислал usage — оцениваем
+    if not res.tokens_out and text:
         res.tokens_out = max(1, len(text) // 3)
         res.tokens_in = res.tokens_in or max(1, sum(len(c) for c in chunks) // 12)
 
@@ -224,7 +229,6 @@ async def _finalize(
         if user is None or chat is None:
             return None, 0, 0
 
-        cost = 0
         if text or reasoning:
             cost = await energy_svc.charge(
                 s, user, model, res.tokens_in, res.tokens_out,
@@ -257,38 +261,3 @@ def _translate(ev: StreamEvent) -> dict[str, Any] | None:
 
 def _err(message: str, code: str) -> dict[str, Any]:
     return {"type": "error", "message": message, "code": code}
-
-
-async def retitle_if_needed(chat_id: int) -> None:
-    """Короткий заголовок моделью — вызывается фоном, ошибки проглатываются."""
-    async with session_scope() as s:
-        chat = await s.get(Chat, chat_id)
-        if chat is None or not chat.title or chat.title.endswith("…") is False:
-            return
-        rows = await s.execute(
-            select(Message).where(Message.chat_id == chat_id).order_by(Message.id).limit(2)
-        )
-        msgs = list(rows.scalars())
-    if len(msgs) < 2:
-        return
-    cheap = next((m for m in catalog.models() if m.multiplier == 0), None)
-    if cheap is None:
-        return
-    try:
-        title, _ = await anymodel.complete(
-            model=cheap.path,
-            messages=[
-                {"role": "system", "content": "Придумай заголовок из 2–4 слов для диалога. Только заголовок."},
-                {"role": "user", "content": (msgs[0].content or "")[:600]},
-            ],
-            max_tokens=24,
-        )
-    except Exception:
-        return
-    title = title.strip().strip('"«»').replace("\n", " ")[:48]
-    if not title:
-        return
-    async with session_scope() as s:
-        chat = await s.get(Chat, chat_id)
-        if chat:
-            chat.title = title

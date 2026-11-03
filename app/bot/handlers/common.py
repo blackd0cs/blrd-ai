@@ -5,7 +5,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
 from app.bot import service
-from app.bot.keyboards import main_menu, pro_kb, webapp_button
+from app.bot.keyboards import main_menu, pro_kb, share_kb, support_kb, webapp_button
 from app.core import energy as energy_svc
 from app.core import settings_store
 from app.core.catalog import catalog
@@ -19,13 +19,13 @@ router = Router(name="common")
 async def start(message: Message, user: User) -> None:
     async with session_scope() as s:
         welcome = await settings_store.get(s, "welcome") or {}
-    text = welcome.get("text") or "Привет! Я blrd ai."
+    text = welcome.get("text") or "Привет! Я БЕЛЕБАЛАРДЫХ AI."
     plan = catalog.plan("pro" if user.is_pro else "free")
     await message.answer(
         f"<b>{text}</b>\n\n"
         f"Тариф: <b>{plan.title}</b> · {energy_svc.energy_display(user.energy_tokens)} энергии\n"
         f"Модель: <b>{(catalog.get(user.current_model) or catalog.default_model(plan.code)).name}</b>\n\n"
-        "Просто напишите вопрос. Команды: /model /balance /pro /new /help",
+        "Просто напишите вопрос. Команды: /model /balance /pro /new /support /help",
         reply_markup=main_menu(),
     )
     kb = webapp_button("💬 Открыть приложение")
@@ -45,7 +45,43 @@ async def help_cmd(message: Message) -> None:
         "/balance — энергия и тариф\n"
         "/pro — подписка и промокод\n"
         "/new — новый чат\n"
+        "/support — связаться с поддержкой\n"
+        "/share — поделиться ботом\n"
         "/stop — прервать ответ"
+    )
+
+
+@router.message(Command("support"))
+@router.message(F.text == "🆘 Поддержка")
+async def support(message: Message) -> None:
+    async with session_scope() as s:
+        links = await settings_store.links(s)
+    url = links["support_url"]
+    if not url:
+        await message.answer(
+            "Поддержка пока не настроена. Напишите позже или через приложение."
+        )
+        return
+    await message.answer(
+        "<b>Поддержка</b>\n"
+        "Опишите проблему одним сообщением: что делали, какая модель, что увидели. "
+        "Если была ошибка — приложите её текст.",
+        reply_markup=support_kb(url),
+    )
+
+
+@router.message(Command("share"))
+async def share(message: Message) -> None:
+    async with session_scope() as s:
+        links = await settings_store.links(s)
+    kb = share_kb(links["bot_username"], links["share_text"])
+    if kb is None:
+        await message.answer("Ссылка на бота не настроена.")
+        return
+    await message.answer(
+        f"<b>Поделитесь ботом</b>\n{links['share_text']}\n\n"
+        f"https://t.me/{links['bot_username']}",
+        reply_markup=kb,
     )
 
 

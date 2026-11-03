@@ -1,69 +1,96 @@
 {% extends "base.html" %}
 {% block title %}Статистика{% endblock %}
+
+{% macro donut(d, label, sub) %}
+<svg class="donut" width="150" height="150" viewBox="0 0 150 150">
+  <circle cx="75" cy="75" r="{{ d.r }}" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="15"/>
+  {% for it in d.items %}
+    {% if it.value %}
+    <circle cx="75" cy="75" r="{{ d.r }}" fill="none" stroke="{{ it.color }}" stroke-width="15"
+      stroke-dasharray="{{ it.dash }} {{ it.gap }}" stroke-dashoffset="{{ it.offset }}"
+      stroke-linecap="round" transform="rotate(-90 75 75)"/>
+    {% endif %}
+  {% endfor %}
+  <text x="75" y="72" text-anchor="middle" font-size="25">{{ label }}</text>
+  <text x="75" y="92" text-anchor="middle" font-size="11.5" class="sub">{{ sub }}</text>
+</svg>
+<div class="legend">
+  {% for it in d.items %}
+  <div class="it"><span class="dot" style="background:{{ it.color }}"></span>
+    <span class="nm">{{ it.name }}</span><span class="vl">{{ it.value }} · {{ it.pct }}%</span></div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
 {% block body %}
 <div class="split">
   <h1>Статистика</h1>
-  {% if maintenance %}<div class="flash warn" style="margin:0">Включены техработы: {{ maintenance_text }}</div>{% endif %}
+  {% if maintenance %}<div class="flash warn" style="margin:0">Техработы: {{ maintenance_text }}</div>{% endif %}
 </div>
 
 <div class="grid c4">
   <div class="kpi"><div class="v">{{ s.users.total }}</div><div class="l">Пользователей</div>
     <div class="s">+{{ s.users.day }} за сутки · +{{ s.users.week }} за неделю</div></div>
-  <div class="kpi"><div class="v">{{ s.users.pro }}</div><div class="l">Активных Pro</div>
-    <div class="s">конверсия {{ s.users.conversion }}%</div></div>
-  <div class="kpi"><div class="v">{{ s.money.month }} ₽</div><div class="l">Выручка за 30 дней</div>
+  <div class="kpi up"><div class="v">{{ s.money.month }} ₽</div><div class="l">Выручка за 30 дней</div>
     <div class="s">всего {{ s.money.total }} ₽ · ARPU {{ s.money.arpu }} ₽</div></div>
   <div class="kpi"><div class="v">{{ s.usage.requests_day }}</div><div class="l">Запросов за сутки</div>
     <div class="s">всего {{ s.usage.requests }}</div></div>
   <div class="kpi"><div class="v">{{ s.usage.energy }}</div><div class="l">Списано энергии</div>
     <div class="s">{{ s.usage.energy_day }} за сутки · ≈${{ s.usage.cost_usd }} у провайдера</div></div>
-  <div class="kpi"><div class="v">{{ s.users.active_week }}</div><div class="l">Активных за неделю</div>
-    <div class="s">забанено {{ s.users.banned }}</div></div>
-  <div class="kpi"><div class="v">{{ s.content.messages }}</div><div class="l">Сообщений</div>
-    <div class="s">в {{ s.content.chats }} чатах</div></div>
-  <div class="kpi"><div class="v">{{ s.money.pending }}</div><div class="l">Платежей в ожидании</div>
-    <div class="s">оплачено {{ s.money.paid }}</div></div>
 </div>
 
-<div class="card chart-wrap">
-  <h2 style="margin-top:0">Запросы за 14 дней</h2>
+<div class="card">
+  <div class="split"><h2>Запросы за 14 дней</h2>
+    <span class="dim nowrap">пик {{ s.series | map(attribute='requests') | max }} / день</span></div>
   <div class="chart">
     {% for d in s.series %}
-      <div class="bar" style="height:{{ d.height }}%"
-           title="{{ d.day }}: {{ d.requests }} запросов, {{ d.tokens }} токенов">
-        {% if loop.index0 % 2 == 0 %}<span>{{ d.day }}</span>{% endif %}
+      <div class="col" title="{{ d.day }}: {{ d.requests }} запросов, {{ d.tokens }} токенов">
+        <div class="bar" style="height:{{ d.height if d.height > 0 else 2 }}%"></div>
+        {% if loop.index0 % 2 == 0 %}<span class="lb">{{ d.day }}</span>{% endif %}
       </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="grid c3">
+  <div class="card">
+    <h2>Тарифы</h2>
+    {{ donut(plan_donut, s.users.conversion ~ '%', 'конверсия в Pro') }}
+  </div>
+  <div class="card">
+    <h2>Источник запросов</h2>
+    {{ donut(source_donut, source_donut.total, 'всего запросов') }}
+  </div>
+  <div class="card">
+    <h2>Топ моделей</h2>
+    {% for m in top_models %}
+      <div class="hbar">
+        <div class="top"><b>{{ m.name }}</b><span class="dim nowrap">{{ m.requests }} · {{ m.energy }} эн.</span></div>
+        <div class="track"><div class="fill" style="width:{{ m.width }}%"></div></div>
+      </div>
+    {% else %}
+      <p class="dim">Запросов пока не было</p>
     {% endfor %}
   </div>
 </div>
 
 <div class="grid c2">
   <div class="card">
-    <h2 style="margin-top:0">Модели</h2>
-    <div class="tbl-wrap"><table>
-      <tr><th>Модель</th><th>Запросов</th><th>Энергии</th></tr>
-      {% for m in s.by_model %}
-        <tr><td>{{ m.name }}<div class="dim mono">{{ m.model }}</div></td>
-          <td>{{ m.requests }}</td><td>{{ m.energy }}</td></tr>
-      {% else %}
-        <tr><td colspan="3" class="dim">Запросов пока не было</td></tr>
-      {% endfor %}
-    </table></div>
+    <h2>Активность</h2>
+    <table>
+      <tr><td class="dim">Активных за неделю</td><td>{{ s.users.active_week }}</td></tr>
+      <tr><td class="dim">Pro сейчас</td><td>{{ s.users.pro }}</td></tr>
+      <tr><td class="dim">Забанено</td><td>{{ s.users.banned }}</td></tr>
+      <tr><td class="dim">Чатов / сообщений</td><td>{{ s.content.chats }} / {{ s.content.messages }}</td></tr>
+    </table>
   </div>
   <div class="card">
-    <h2 style="margin-top:0">Откуда пишут</h2>
-    <table>
-      {% for src, n in s.by_source.items() %}
-        <tr><td>{{ "Бот" if src == "bot" else ("Веб" if src == "web" else src) }}</td><td>{{ n }}</td></tr>
-      {% else %}
-        <tr><td class="dim">Нет данных</td></tr>
-      {% endfor %}
-    </table>
     <h2>Экономика</h2>
     <table>
-      <tr><td>1 энергия</td><td>{{ s.unit }} базовых токенов</td></tr>
-      <tr><td>Поисков в интернете</td><td>{{ s.usage.searches }}</td></tr>
-      <tr><td>Активных промокодов</td><td><a href="/admin/promos">{{ s.promos_active }}</a></td></tr>
+      <tr><td class="dim">1 энергия</td><td>{{ s.unit }} базовых токенов</td></tr>
+      <tr><td class="dim">Платежей оплачено</td><td>{{ s.money.paid }}, в ожидании {{ s.money.pending }}</td></tr>
+      <tr><td class="dim">Поисков в интернете</td><td>{{ s.usage.searches }}</td></tr>
+      <tr><td class="dim">Активных промокодов</td><td><a href="/admin/promos">{{ s.promos_active }}</a></td></tr>
     </table>
   </div>
 </div>

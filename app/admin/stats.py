@@ -189,3 +189,73 @@ async def user_detail(session: AsyncSession, user_id: int) -> dict[str, Any] | N
         "payments": payments,
         "recent_chats": recent_chats,
     }
+
+def donut(parts: list[tuple[str, int]], colors: list[str]) -> dict[str, Any]:
+    """Данные для SVG-пончика: доли, смещения, цвета."""
+    total = sum(v for _, v in parts) or 1
+    r = 54.0
+    circ = 2 * 3.14159265 * r
+    out, offset = [], 0.0
+    for i, (name, value) in enumerate(parts):
+        frac = value / total
+        out.append({
+            "name": name, "value": value,
+            "pct": round(frac * 100, 1),
+            "dash": round(circ * frac, 2),
+            "gap": round(circ * (1 - frac), 2),
+            "offset": round(-offset, 2),
+            "color": colors[i % len(colors)],
+        })
+        offset += circ * frac
+    return {"total": total, "circ": round(circ, 2), "r": r, "items": out}
+
+
+async def chats_page(
+    session: AsyncSession, *, user_id: int | None = None, page: int = 1, size: int = 40
+) -> dict[str, Any]:
+    q = select(Chat, User).join(User, User.id == Chat.user_id)
+    if user_id is not None:
+        q = q.where(Chat.user_id == user_id)
+
+    total = await session.scalar(select(func.count()).select_from(q.subquery())) or 0
+    rows = (
+        await session.execute(
+            q.order_by(Chat.updated_at.desc()).offset((page - 1) * size).limit(size)
+        )
+    ).all()
+
+    ids = [c.id for c, _ in rows]
+    counts: dict[int, int] = {}
+    if ids:
+        cnt = await session.execute(
+            select(Message.chat_id, func.count())
+            .where(Message.chat_id.in_(ids)).group_by(Message.chat_id)
+        )
+        counts = {cid: n for cid, n in cnt.all()}
+
+    return {
+        "rows": [{"chat": c, "user": u, "messages": counts.get(c.id, 0)} for c, u in rows],
+        "total": total,
+        "page": page,
+        "pages": max(1, (total + size - 1) // size),
+    }
+
+
+async def chat_detail(session: AsyncSession, chat_id: int) -> dict[str, Any] | None:
+    chat = await session.get(Chat, chat_id)
+    if chat is None:
+        return None
+    user = await session.get(User, chat.user_id)
+    msgs = (
+        await session.execute(
+            select(Message).where(Message.chat_id == chat_id).order_by(Message.id)
+        )
+    ).scalars().all()
+    spent = sum(int(m.base_cost or 0) for m in msgs)
+    return {
+        "chat": chat,
+        "user": user,
+        "messages": msgs,
+        "spent_energy": energy_svc.energy_display(spent),
+        "spent_tokens": spent,
+    }

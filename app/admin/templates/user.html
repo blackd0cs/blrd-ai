@@ -8,7 +8,10 @@
     {% else %}<span class="tag free">Free</span>{% endif %}
     {% if user.is_admin %}<span class="tag adm">admin</span>{% endif %}
   </h1>
-  <a class="btn ghost sm" href="/admin/users">← К списку</a>
+  <span class="nowrap">
+    <a class="btn ghost sm" href="/admin/chats?user_id={{ user.id }}">Переписка ({{ chats }})</a>
+    <a class="btn ghost sm" href="/admin/users">← К списку</a>
+  </span>
 </div>
 
 <div class="grid c4">
@@ -16,7 +19,7 @@
     <div class="s">квота тарифа {{ plan.energy }}</div></div>
   <div class="kpi"><div class="v">{{ spent_energy }}</div><div class="l">Потрачено энергии</div>
     <div class="s">{{ user.requests or 0 }} запросов</div></div>
-  <div class="kpi"><div class="v">{{ user.paid_total or 0 }} ₽</div><div class="l">Оплачено всего</div>
+  <div class="kpi up"><div class="v">{{ user.paid_total or 0 }} ₽</div><div class="l">Оплачено всего</div>
     <div class="s">{% if user.plan_until %}Pro до {{ user.plan_until|dtfmt }}{% else %}подписки нет{% endif %}</div></div>
   <div class="kpi"><div class="v">{{ messages }}</div><div class="l">Сообщений</div>
     <div class="s">в {{ chats }} чатах</div></div>
@@ -24,12 +27,13 @@
 
 <div class="grid c2">
   <div class="card">
-    <h2 style="margin-top:0">Профиль</h2>
+    <h2>Профиль</h2>
     <table>
       <tr><td class="dim">Telegram ID</td><td class="mono">{{ user.id }}</td></tr>
-      <tr><td class="dim">Username</td><td>{{ '@' ~ user.username if user.username else '—' }}</td></tr>
+      <tr><td class="dim">Username</td>
+        <td>{% if user.username %}<a href="https://t.me/{{ user.username }}" target="_blank" rel="noopener">@{{ user.username }}</a>{% else %}—{% endif %}</td></tr>
       <tr><td class="dim">Язык</td><td>{{ user.language or '—' }}</td></tr>
-      <tr><td class="dim">Регистрация</td><td>{{ user.created_at|dtfmt }} ({{ user.source or '—' }})</td></tr>
+      <tr><td class="dim">Регистрация</td><td>{{ user.created_at|dtfmt }} <span class="dim">({{ user.source or '—' }})</span></td></tr>
       <tr><td class="dim">Последний вход</td><td>{{ user.last_seen|dtfmt }}</td></tr>
       <tr><td class="dim">Текущая модель</td><td class="mono">{{ user.current_model or '—' }}</td></tr>
       {% if user.refill_at %}<tr><td class="dim">Автопополнение</td><td>{{ user.refill_at|dtfmt }}</td></tr>{% endif %}
@@ -38,18 +42,20 @@
   </div>
 
   <div class="card">
-    <h2 style="margin-top:0">Подписка и энергия</h2>
+    <h2>Подписка и энергия</h2>
     <form method="post" action="/admin/users/{{ user.id }}/action" class="row">
       <input type="hidden" name="action" value="grant_pro" />
       <div><label>Выдать Pro, дней</label><input name="value" value="30" /></div>
       <div style="flex:0"><button class="btn">Выдать</button></div>
     </form>
-    <form method="post" action="/admin/users/{{ user.id }}/action" class="row" style="margin-top:10px">
+
+    <form method="post" action="/admin/users/{{ user.id }}/action" class="row" style="margin-top:11px">
       <input type="hidden" name="action" value="add_energy" />
       <div><label>Начислить энергии (минус — списать)</label><input name="value" value="100" /></div>
       <div style="flex:0"><button class="btn ghost">Начислить</button></div>
     </form>
-    <div class="row" style="margin-top:12px">
+
+    <div class="row" style="margin-top:14px">
       <form method="post" action="/admin/users/{{ user.id }}/action" style="flex:0">
         <input type="hidden" name="action" value="reset_energy" />
         <button class="btn ghost sm">Сбросить к квоте</button></form>
@@ -60,22 +66,36 @@
         <input type="hidden" name="action" value="make_admin" />
         <button class="btn ghost sm">{{ 'Убрать админа' if user.is_admin else 'Сделать админом' }}</button></form>
     </div>
+
+    <h2 style="margin-top:22px">Модель по умолчанию</h2>
+    <form method="post" action="/admin/users/{{ user.id }}/action" class="row">
+      <input type="hidden" name="action" value="set_model" />
+      <div><select name="value">
+        {% for m in models %}
+          <option value="{{ m.path }}" {{ 'selected' if m.path == user.current_model }}>
+            {{ m.name }} — {{ 'бесплатно' if m.multiplier == 0 else '×' ~ m.multiplier }}
+          </option>
+        {% endfor %}
+      </select></div>
+      <div style="flex:0"><button class="btn ghost">Применить</button></div>
+    </form>
   </div>
 </div>
 
 <div class="grid c2">
   <div class="card">
-    <h2 style="margin-top:0">Написать пользователю</h2>
+    <h2>Написать пользователю</h2>
     <form method="post" action="/admin/users/{{ user.id }}/action">
       <input type="hidden" name="action" value="message" />
       <div class="field"><textarea name="value" rows="4"
-        placeholder="Текст сообщения. Можно HTML: <b>жирный</b>, <i>курсив</i>, <code>код</code>"></textarea></div>
+        placeholder="Текст сообщения. Можно HTML: <b>жирный</b>, <i>курсив</i>, <code>код</code>, <a href=&quot;…&quot;>ссылка</a>"></textarea></div>
       <button class="btn">Отправить в Telegram</button>
     </form>
+    <p class="dim" style="margin:12px 0 0">Если бот заблокирован пользователем, Telegram отклонит отправку — об этом скажет сообщение об ошибке.</p>
   </div>
 
   <div class="card">
-    <h2 style="margin-top:0">Доступ</h2>
+    <h2>Доступ</h2>
     {% if user.is_banned %}
       <form method="post" action="/admin/users/{{ user.id }}/action">
         <input type="hidden" name="action" value="unban" />
@@ -89,51 +109,64 @@
         <button class="btn danger">Заблокировать</button>
       </form>
     {% endif %}
-    <h2>Опасные действия</h2>
-    <form method="post" action="/admin/users/{{ user.id }}/action" class="row">
+
+    <h2 style="margin-top:22px">Опасные действия</h2>
+    <form method="post" action="/admin/users/{{ user.id }}/action"
+          onsubmit="return confirm('Удалить все чаты пользователя?')">
       <input type="hidden" name="action" value="wipe_chats" />
-      <div style="flex:0"><button class="btn danger sm">Удалить все чаты</button></div>
+      <button class="btn danger sm">Удалить все чаты</button>
     </form>
-    <form method="post" action="/admin/users/{{ user.id }}/action" class="row" style="margin-top:10px">
+    <form method="post" action="/admin/users/{{ user.id }}/action" class="row" style="margin-top:12px"
+          onsubmit="return confirm('Удалить аккаунт безвозвратно?')">
       <input type="hidden" name="action" value="delete" />
-      <div><label>Удалить аккаунт: впишите {{ user.id }}</label><input name="value" placeholder="{{ user.id }}" /></div>
+      <div><label>Удалить аккаунт: впишите {{ user.id }}</label>
+        <input name="value" placeholder="{{ user.id }}" /></div>
       <div style="flex:0"><button class="btn danger">Удалить</button></div>
     </form>
   </div>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0">Последние запросы</h2>
+  <div class="split"><h2>Последние запросы</h2>
+    <a class="btn ghost sm" href="/admin/chats?user_id={{ user.id }}">Смотреть переписку</a></div>
   <div class="tbl-wrap"><table>
-    <tr><th>Когда</th><th>Модель</th><th>Токены</th><th>Списано</th><th>Источник</th></tr>
+    <tr><th>Когда</th><th>Модель</th><th>Токены</th><th>Списано</th><th>Поиск</th><th>Источник</th></tr>
     {% for l in logs %}
-      <tr><td class="dim">{{ l.created_at|dtfmt }}</td><td class="mono">{{ l.model }}</td>
-        <td>{{ l.tokens_in }} / {{ l.tokens_out }}</td><td>{{ l.base_cost }}</td>
-        <td>{{ 'бот' if l.source == 'bot' else 'веб' }}</td></tr>
+      <tr><td class="dim nowrap">{{ l.created_at|dtfmt }}</td><td class="mono">{{ l.model }}</td>
+        <td class="nowrap">{{ l.tokens_in }} → {{ l.tokens_out }}</td><td>{{ l.base_cost }}</td>
+        <td>{{ l.searches or '—' }}</td>
+        <td class="dim">{{ 'бот' if l.source == 'bot' else 'веб' }}</td></tr>
     {% else %}
-      <tr><td colspan="5" class="dim">Запросов нет</td></tr>
+      <tr><td colspan="6" class="dim">Запросов нет</td></tr>
     {% endfor %}
   </table></div>
 </div>
 
 <div class="grid c2">
   <div class="card">
-    <h2 style="margin-top:0">Платежи</h2>
+    <h2>Платежи</h2>
     <table>
       <tr><th>Дата</th><th>Сумма</th><th>Статус</th></tr>
       {% for p in payments %}
-        <tr><td class="dim">{{ p.created_at|dtfmt }}</td><td>{{ p.amount }} ₽</td>
-          <td>{{ p.status }}{% if p.applied %} <span class="tag pro">выдано</span>{% endif %}</td></tr>
+        <tr><td class="dim nowrap">{{ p.created_at|dtfmt }}</td><td class="nowrap">{{ p.amount }} ₽</td>
+          <td>{% if p.applied %}<span class="tag pro">выдано</span>
+              {% elif p.status == 'PENDING' %}<span class="tag free">ожидание</span>
+              {% else %}<span class="tag ban">{{ p.status }}</span>{% endif %}</td></tr>
       {% else %}
         <tr><td colspan="3" class="dim">Платежей нет</td></tr>
       {% endfor %}
     </table>
   </div>
+
   <div class="card">
-    <h2 style="margin-top:0">Чаты</h2>
+    <h2>Чаты</h2>
     <table>
       {% for c in recent_chats %}
-        <tr><td>{{ c.title }}</td><td class="dim">{{ c.source }}</td><td class="dim">{{ c.updated_at|dtfmt }}</td></tr>
+        <tr>
+          <td><a href="/admin/chats/{{ c.id }}">{{ c.title }}</a></td>
+          <td class="dim">{{ 'бот' if c.source == 'bot' else 'веб' }}</td>
+          <td class="dim nowrap">{{ c.updated_at|dtfmt }}</td>
+        </tr>
       {% else %}
         <tr><td class="dim">Чатов нет</td></tr>
       {% endfor %}

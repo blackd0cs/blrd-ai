@@ -28,6 +28,8 @@ COMMANDS = [
     BotCommand(command="balance", description="Энергия и тариф"),
     BotCommand(command="pro", description="Подписка Pro"),
     BotCommand(command="promo", description="Ввести промокод"),
+    BotCommand(command="support", description="Поддержка"),
+    BotCommand(command="share", description="Поделиться ботом"),
     BotCommand(command="stop", description="Прервать ответ"),
     BotCommand(command="help", description="Что умеет бот"),
 ]
