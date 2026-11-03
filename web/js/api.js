@@ -92,12 +92,12 @@ window.API = (() => {
     return req("/api/files", { method: "POST", body: fd });
   }
 
-  /* ── стрим генерации ────────────────────────────────────── */
-  async function stream(chatId, payload, onEvent, signal) {
-    const r = await fetch(`/api/chats/${chatId}/send`, {
+  /* ── SSE: общий разбор потока событий ───────────────────── */
+  async function sse(url, payload, onEvent, signal) {
+    const r = await fetch(url, {
       method: "POST",
       headers: headers({ "Content-Type": "application/json", Accept: "text/event-stream" }),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload || {}),
       credentials: "same-origin",
       signal,
     });
@@ -138,10 +138,17 @@ window.API = (() => {
     }
   }
 
+  const stream = (chatId, payload, onEvent, signal) =>
+    sse(`/api/chats/${chatId}/send`, payload, onEvent, signal);
+
+  const regenerate = (chatId, payload, onEvent, signal) =>
+    sse(`/api/chats/${chatId}/regenerate`, payload, onEvent, signal);
+
   return {
     ApiError,
     auth,
     me: () => req("/api/me"),
+    config: () => req("/api/config"),
     models: () => req("/api/models"),
     selectModel: model => req("/api/models/select", { method: "POST", body: { model } }),
     chats: () => req("/api/chats"),
@@ -156,6 +163,7 @@ window.API = (() => {
     upload,
     fileUrl,
     stream,
+    regenerate,
     get token() { return token; },
   };
 })();

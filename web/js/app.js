@@ -1,30 +1,125 @@
-/* Приложение: состояние, рендер, стриминг, листы. */
+/* =========================================================
+   БЕЛЕБАЛАРДЫХ AI — Mini App
+   ========================================================= */
 (() => {
 const tg = window.Telegram?.WebApp;
 const $ = id => document.getElementById(id);
+const I = window.ICONS;
+
+const REASON_OPEN_WHILE_STREAM = true;   // рассуждения видны сразу, без нажатия
 
 const state = {
   user: null,
   plan: "free",
   models: [],
   pro: { price_rub: 150, days: 30, energy: 1000, features: [] },
+  cfg: { bot_username: "", support_url: "", share_text: "" },
   modelPath: null,
   chats: [],
   chatId: null,
   messages: [],
-  pending: [],      // {localId, kind, name, file, url, id|null, uploading}
+  pending: [],
   busy: false,
   sidebar: false,
   abort: null,
-  maintenance: null,
+  homeScreen: "unsupported",
 };
 
-const ICON_DOC = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5 2.5h5l3 3v10H5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M10 2.5v3h3" stroke="currentColor" stroke-width="1.4"/></svg>`;
-const ICON_UP = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 15.5V4.5m0 0L5 9.5M10 4.5l5 5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const ICON_STOP = `<svg width="16" height="16" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="2.6" fill="currentColor"/></svg>`;
-const ICON_CHECK = `<svg width="19" height="19" viewBox="0 0 18 18" fill="none"><path d="M4 9.4l3.2 3.1L14 5.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const ICON_TRASH = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6.5 5V3.5h3V5M4.8 5l.7 8h5l.7-8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const ICON_WARN = `<svg width="19" height="19" viewBox="0 0 20 20" fill="none" style="flex:none;margin-top:2px"><path d="M10 3.5l7 13H3l7-13zM10 8.5v4M10 14.4v.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+/* =====================================================
+   Telegram: совместимость, fullscreen, отступы
+   ===================================================== */
+
+/* Старые клиенты объявляют метод, но бросают WebAppMethodUnsupported
+   при вызове — поэтому любой вызов идёт через эту обёртку. */
+function tgCall(fn, ...args) {
+  if (typeof fn !== "function") return undefined;
+  try {
+    return fn.apply(tg, args);
+  } catch (e) {
+    return undefined;
+  }
+}
+
+const tgAtLeast = v => {
+  try { return !!tg?.isVersionAtLeast?.(v); } catch (e) { return false; }
+};
+
+function applyInsets() {
+  const root = document.documentElement;
+  const safe = tg?.safeAreaInset || { top: 0, bottom: 0, left: 0, right: 0 };
+  const content = tg?.contentSafeAreaInset || { top: 0, bottom: 0, left: 0, right: 0 };
+
+  /* top: вырез экрана + полоса с кнопками «Закрыть» и «…» */
+  const top = (safe.top || 0) + (content.top || 0);
+  const bottom = (safe.bottom || 0) + (content.bottom || 0);
+  const side = Math.max(safe.left || 0, safe.right || 0, content.left || 0, content.right || 0);
+
+  root.style.setProperty("--tg-top", `${top}px`);
+  root.style.setProperty("--tg-bottom", `${bottom}px`);
+  root.style.setProperty("--tg-side", `${side}px`);
+
+  const h = $("header")?.offsetHeight;
+  if (h) root.style.setProperty("--head-h", `${h - top}px`);
+}
+
+function setupTelegram() {
+  if (!tg) { applyInsets(); return; }
+
+  tgCall(tg.ready);
+  tgCall(tg.expand);
+  tgCall(tg.setHeaderColor, "#000000");
+  tgCall(tg.setBackgroundColor, "#000000");
+  tgCall(tg.disableVerticalSwipes);
+
+  /* Fullscreen — Bot API 8.0 и только телефоны */
+  if (tgAtLeast("8.0") && ["android", "ios"].includes(tg.platform) && !tg.isFullscreen) {
+    tgCall(tg.requestFullscreen);
+  }
+
+  for (const ev of ["safeAreaChanged", "contentSafeAreaChanged", "fullscreenChanged", "viewportChanged"]) {
+    tgCall(tg.onEvent, ev, () => { applyInsets(); toBottom(); });
+  }
+
+  /* Добавление на домашний экран — Bot API 8.0 */
+  if (tgAtLeast("8.0")) {
+    tgCall(tg.checkHomeScreenStatus, status => {
+      state.homeScreen = status || "unknown";
+      renderSidebarActions();
+    });
+  } else {
+    state.homeScreen = "unsupported";
+  }
+
+  applyInsets();
+  setTimeout(applyInsets, 400);   // iOS сообщает отступы с задержкой
+}
+
+/* =====================================================
+   Иконки в статической разметке
+   ===================================================== */
+function mountIcons() {
+  $("burger").innerHTML = I.menu;
+  $("new-top").innerHTML = I.newChat;
+  $("close-sb").innerHTML = I.close;
+  $("pill-chev").innerHTML = I.chevron;
+  $("attach").innerHTML = I.attach;
+
+  const logo = $("sb-logo");
+  if (I.logoUrl) {
+    logo.src = I.logoUrl;
+    logo.onerror = () => { logo.hidden = true; };
+  } else {
+    logo.hidden = true;
+  }
+}
+
+/* =====================================================
+   Утилиты
+   ===================================================== */
+const esc = window.MD.esc;
+const model = () => state.models.find(m => m.path === state.modelPath) || state.models[0] || null;
+const isPro = () => state.plan === "pro";
+const locked = m => !!m && m.locked;
 
 const FALLBACK_AVATAR = "data:image/svg+xml;utf8," + encodeURIComponent(
   `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
@@ -33,13 +128,6 @@ const FALLBACK_AVATAR = "data:image/svg+xml;utf8," + encodeURIComponent(
    <circle cx='45' cy='29' r='17' fill='#2f7bff' opacity='.75'/>
    <circle cx='28' cy='49' r='14' fill='#ff2fb3' opacity='.6'/>
    <circle cx='50' cy='53' r='11' fill='#00e0d0' opacity='.5'/></svg>`);
-
-/* ===================== утилиты ===================== */
-const esc = window.MD.esc;
-const model = () => state.models.find(m => m.path === state.modelPath) || state.models[0] || null;
-const chat = () => state.chats.find(c => c.id === state.chatId) || null;
-const isPro = () => state.plan === "pro";
-const locked = m => !!m && m.locked;
 
 function toast(text) {
   $("frame").querySelectorAll(".toast").forEach(t => t.remove());
@@ -65,15 +153,40 @@ function boot(html, show = true) {
   b.querySelector(".boot-inner").innerHTML = html;
 }
 
-/* ===================== рендер шапки ===================== */
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) { /* ниже запасной путь */ }
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;left:-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* =====================================================
+   Шапка
+   ===================================================== */
 function renderHeader() {
   const m = model();
   $("pill-name").textContent = m ? m.short : "—";
   $("pill-plan").textContent = isPro() ? "Pro" : "Free";
+
   const u = state.user;
   if (!u) return;
   $("u-name").textContent = u.name;
   $("u-plan").textContent = `${isPro() ? "Pro" : "Free"} · ${u.energy} энергии`;
+
   const src = u.photo_url || FALLBACK_AVATAR;
   for (const id of ["av-top", "av-side"]) {
     const img = $(id).querySelector("img");
@@ -85,31 +198,32 @@ function renderHeader() {
   }
 }
 
-/* ===================== рендер сообщений ===================== */
+/* =====================================================
+   Сообщения
+   ===================================================== */
 function attachmentHTML(a) {
   if (a.kind === "image") {
     return `<img class="ph" data-file="${esc(a.id || "")}" src="${a.url || ""}" alt="${esc(a.name || "")}">`;
   }
-  return `<div class="chip">${ICON_DOC}<span>${esc(a.name || "файл")}</span></div>`;
+  return `<div class="chip">${I.doc}<span>${esc(a.name || "файл")}</span></div>`;
 }
 
-function messageHTML(m) {
-  if (m.role === "user") {
-    const atts = (m.atts || []).map(attachmentHTML).join("");
-    return `<div class="msg user" data-id="${m.id || ""}"><div class="col">
-      ${atts ? `<div class="atts">${atts}</div>` : ""}
-      ${m.content ? `<div class="bubble">${esc(m.content)}</div>` : ""}</div></div>`;
-  }
-  return `<div class="msg assistant" data-id="${m.id || ""}"><div class="body">
-    ${m.reasoning ? thinkHTML(m.reasoning, false) : ""}
-    ${window.MD.render(m.content || "")}
-    ${citesHTML(m.citations)}</div></div>`;
+function actsHTML(kind, idx) {
+  const copy = `<button class="act" data-copy="${idx}" aria-label="Копировать" title="Копировать">${I.copy}</button>`;
+  if (kind === "user") return `<div class="acts">${copy}</div>`;
+  const retry = `<button class="act" data-retry="1" aria-label="Повторить" title="Перегенерировать">${I.retry}</button>`;
+  return `<div class="acts">${copy}${retry}</div>`;
 }
 
-function thinkHTML(text, open) {
-  return `<details class="think"${open ? " open" : ""}>
-    <summary>🧩 Размышления модели</summary>
-    <div class="txt">${esc(text)}</div></details>`;
+function reasonHTML(text, open) {
+  if (!text) return "";
+  return `<div class="reason ${open ? "open" : ""}">
+    <button class="reason-head" data-reason-toggle>
+      <span>Рассуждения</span>
+      <span class="arw">${I.chevron}</span>
+    </button>
+    <div class="reason-box"><div class="reason-scroll">${esc(text)}</div></div>
+  </div>`;
 }
 
 function citesHTML(items) {
@@ -118,6 +232,27 @@ function citesHTML(items) {
     `<a href="${esc(c.url)}" target="_blank" rel="noopener">
        <span class="n">${i + 1}.</span><span class="t">${esc(c.title || c.url)}</span></a>`).join("");
   return `<div class="cites">${rows}</div>`;
+}
+
+function messageHTML(m, idx) {
+  if (m.role === "user") {
+    const atts = (m.atts || []).map(attachmentHTML).join("");
+    return `<div class="msg user" data-idx="${idx}"><div class="col">
+      ${atts ? `<div class="atts">${atts}</div>` : ""}
+      ${m.content ? `<div class="bubble">${esc(m.content)}</div>` : ""}
+      ${m.content ? actsHTML("user", idx) : ""}</div></div>`;
+  }
+  if (m.error) {
+    return `<div class="msg assistant" data-idx="${idx}">
+      <div class="msg-error">${I.warn}<div>${esc(m.content)}
+        ${m.needPro ? `<button class="e-up" data-paywall>Открыть Pro →</button>` : ""}</div></div>
+      ${actsHTML("assistant", idx)}</div>`;
+  }
+  return `<div class="msg assistant" data-idx="${idx}"><div class="body">
+    ${reasonHTML(m.reasoning, false)}
+    ${window.MD.render(m.content || "")}
+    ${citesHTML(m.citations)}</div>
+    ${actsHTML("assistant", idx)}</div>`;
 }
 
 async function hydrateImages(root) {
@@ -132,23 +267,43 @@ async function hydrateImages(root) {
   }
 }
 
+/* =====================================================
+   Пустой экран
+   ===================================================== */
+const GREETINGS = [
+  "Привет, {name}!",
+  "О чём поболтаем?",
+  "Чем помочь, {name}?",
+  "Слушаю внимательно",
+  "С чего начнём?",
+  "Рад видеть, {name}",
+  "Что обсудим сегодня?",
+  "Готов к работе",
+  "Какие планы, {name}?",
+  "Спрашивай что угодно",
+];
+
+const HINTS = [
+  "Объясни простыми словами",
+  "Напиши код на Python",
+  "Составь план на неделю",
+  "Переведи текст",
+  "Придумай название",
+  "Разбери эту ошибку",
+  "Сделай таблицу сравнения",
+  "Сократи текст вдвое",
+  "Напиши письмо вежливо",
+  "Посчитай экономику",
+  "Опиши фото",
+  "Найди ошибки в тексте",
+];
+
+
+
 function renderChat(force) {
   const box = $("scroll");
   if (!state.messages.length) {
-    const m = model();
-    box.innerHTML = `<div class="empty"><div>
-      <h1>blrd ai</h1>
-      <p>Спроси что угодно${m ? `. Модель: ${esc(m.name)}` : ""}</p>
-      <div class="sugg">
-        <button data-q="Объясни простыми словами, как работают нейросети">Объясни просто</button>
-        <button data-q="Напиши функцию на Python и объясни её">Код на Python</button>
-        <button data-q="Составь план на неделю по пунктам">Составь план</button>
-      </div></div></div>`;
-    box.querySelectorAll(".sugg button").forEach(b => b.onclick = () => {
-      $("ta").value = b.dataset.q;
-      syncSend();
-      send();
-    });
+    box.innerHTML = emptyHTML();
     return;
   }
   box.innerHTML = state.messages.map(messageHTML).join("");
@@ -156,11 +311,28 @@ function renderChat(force) {
   toBottom(force);
 }
 
+/* =====================================================
+   Список чатов
+   ===================================================== */
+function renderChat(force) {
+  const box = $("scroll");
+  if (!state.messages.length) {
+    box.innerHTML = emptyScreen();
+    return;
+  }
+  box.innerHTML = state.messages.map(messageHTML).join("");
+  hydrateImages(box);
+  toBottom(force);
+}
+
+/* =====================================================
+   Список чатов
+   ===================================================== */
 function renderChats() {
   $("chats").innerHTML = state.chats.map(c => `
     <button class="chat-item ${c.id === state.chatId ? "active" : ""}" data-haptic="off" data-id="${c.id}">
       <span class="t">${esc(c.title)}</span>
-      <span class="del" data-del="${c.id}">${ICON_TRASH}</span>
+      <span class="del" data-del="${c.id}">${I.trash}</span>
     </button>`).join("") || `<div class="sb-label">Пока пусто</div>`;
 
   $("chats").querySelectorAll(".chat-item").forEach(el => {
@@ -179,33 +351,93 @@ function renderChats() {
   });
 }
 
-function renderPending() {
-  const box = $("pending");
-  box.hidden = !state.pending.length;
-  box.innerHTML = state.pending.map((a, i) => {
-    const inner = a.kind === "image"
-      ? `<img src="${a.url || ""}" alt="">`
-      : `<div class="chip">${ICON_DOC}<span>${esc(a.name)}</span></div>`;
-    return `<div class="th ${a.uploading ? "up" : ""}">${inner}
-      <button class="rm" data-haptic="off" data-i="${i}" aria-label="Убрать">✕</button></div>`;
-  }).join("");
-  box.querySelectorAll(".rm").forEach(b => b.onclick = () => {
-    window.Haptic.press();
-    const [removed] = state.pending.splice(+b.dataset.i, 1);
-    if (removed?.url) URL.revokeObjectURL(removed.url);
-    renderPending();
-    syncSend();
+/* =====================================================
+   Сайдбар
+   ===================================================== */
+function renderSidebarActions() {
+  const items = [
+    { id: "new", icon: I.newChat, label: "Новый чат" },
+    { id: "share", icon: I.share, label: "Поделиться ботом" },
+    { id: "support", icon: I.support, label: "Поддержка" },
+  ];
+
+  /* кнопку показываем только там, где метод реально работает */
+  const canHome = tgAtLeast("8.0")
+    && (state.homeScreen === "missed" || state.homeScreen === "unknown");
+  if (canHome) {
+    items.push({ id: "home", icon: I.home, label: "Добавить на домашний экран" });
+  }
+
+  $("sb-acts").innerHTML = items.map(
+    it => `<button class="sb-act" data-act="${it.id}">${it.icon}<span>${it.label}</span></button>`
+  ).join("");
+
+  $("sb-acts").querySelectorAll("[data-act]").forEach(b => {
+    b.onclick = () => sidebarAction(b.dataset.act);
   });
 }
 
-/* ===================== сайдбар ===================== */
-function openSidebar() { state.sidebar = true; $("sidebar").classList.add("open"); $("scrim").classList.add("show"); }
-function closeSidebar() { state.sidebar = false; $("sidebar").classList.remove("open"); $("scrim").classList.remove("show"); }
+async function sidebarAction(id) {
+  if (id === "new") { await newChat(); return; }
+
+  if (id === "share") {
+    const uname = state.cfg.bot_username;
+    if (!uname) { toast("Ссылка на бота не настроена"); return; }
+    const url = `https://t.me/${uname}`;
+    const text = state.cfg.share_text || "Все топовые нейросети в одном боте";
+    const share = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    if (tgCall(tg?.openTelegramLink, share) === undefined) {
+      window.open(share, "_blank", "noopener");
+    }
+    closeSidebar();
+    return;
+  }
+
+  if (id === "support") {
+    const url = state.cfg.support_url;
+    if (!url) { toast("Поддержка пока не настроена"); return; }
+    const opened = url.includes("t.me/")
+      ? tgCall(tg?.openTelegramLink, url)
+      : tgCall(tg?.openLink, url);
+    if (opened === undefined) window.open(url, "_blank", "noopener");
+    closeSidebar();
+    return;
+  }
+
+  if (id === "home") {
+    if (!tgAtLeast("8.0")) {
+      toast("Обновите Telegram, чтобы добавить приложение на экран");
+      return;
+    }
+    tgCall(tg.onEvent, "homeScreenAdded", () => {
+      state.homeScreen = "added";
+      renderSidebarActions();
+      window.Haptic.ok();
+      toast("Добавлено на домашний экран");
+    });
+    if (tgCall(tg.addToHomeScreen) === undefined) {
+      toast("Это устройство не поддерживает такую установку");
+    }
+  }
+}
+
+function openSidebar() {
+  state.sidebar = true;
+  $("sidebar").classList.add("open");
+  $("scrim").classList.add("show");
+}
+function closeSidebar() {
+  state.sidebar = false;
+  $("sidebar").classList.remove("open");
+  $("scrim").classList.remove("show");
+}
 $("burger").onclick = openSidebar;
 $("close-sb").onclick = closeSidebar;
 $("scrim").onclick = () => { window.Haptic.tap(); closeSidebar(); };
 
-/* ===================== листы ===================== */
+/* =====================================================
+   Листы
+   ===================================================== */
 function closeSheet() { $("layer").innerHTML = ""; $("pill").classList.remove("open"); }
 
 function sheet(inner, { onClose } = {}) {
@@ -226,7 +458,7 @@ function modelSheet() {
     const bits = [m.multiplier === 0 ? "бесплатно" : `×${m.multiplier} энергии`];
     if (m.vision) bits.push("видит картинки");
     if (m.web_search) bits.push("ищет в интернете");
-    const right = lk ? `<span class="tag">PRO</span>` : (m.path === state.modelPath ? ICON_CHECK : "");
+    const right = lk ? `<span class="tag">PRO</span>` : (m.path === state.modelPath ? I.check : "");
     return `<button class="m-row ${m.path === state.modelPath ? "sel" : ""} ${lk ? "locked" : ""}"
       data-haptic="off" data-p="${esc(m.path)}">
       <div class="meta"><div class="nm">${esc(m.name)}</div><div class="sub">${bits.join(" · ")}</div></div>
@@ -244,12 +476,11 @@ function modelSheet() {
       state.modelPath = m.path;
       closeSheet();
       renderHeader();
-      if (!state.messages.length) renderChat(true);
       toast(`Модель: ${m.name}`);
       try {
         await window.API.selectModel(m.path);
         if (state.chatId) await window.API.patchChat(state.chatId, { model: m.path });
-      } catch (e) { /* выбор модели не критичен: уйдёт с запросом */ }
+      } catch (e) { /* уйдёт вместе с запросом */ }
     };
   });
 }
@@ -257,11 +488,11 @@ $("pill").onclick = () => ($("layer").querySelector(".sheet") ? closeSheet() : m
 
 function paywall(reason) {
   const pro = state.pro;
-  const feats = (pro.features || []).map(f => `<li>${ICON_CHECK}<span>${esc(f)}</span></li>`).join("");
+  const feats = (pro.features || []).map(f => `<li>${I.check}<span>${esc(f)}</span></li>`).join("");
   const el = sheet(`<div class="handle"></div>
     <div class="paywall">
-      ${reason ? `<div class="msg-error" style="margin-bottom:16px">${ICON_WARN}<div>${esc(reason)}</div></div>` : ""}
-      <h2>blrd ai Pro</h2>
+      ${reason ? `<div class="msg-error" style="margin-bottom:16px">${I.warn}<div>${esc(reason)}</div></div>` : ""}
+      <h2>БЕЛЕБАЛАРДЫХ Pro</h2>
       <div class="price">${pro.price_rub} ₽</div>
       <div class="per">за ${pro.days} дней, без автосписаний</div>
       <ul>${feats}</ul>
@@ -280,7 +511,9 @@ function paywall(reason) {
     try {
       const { payment_id, url } = await window.API.createPayment();
       window.Haptic.rigid();
-      openPayLink(url);
+      if (tgCall(tg?.openLink, url, { try_instant_view: false }) === undefined) {
+        window.open(url, "_blank", "noopener");
+      }
       watchPayment(payment_id);
       btn.textContent = "Открыли страницу оплаты";
     } catch (err) {
@@ -310,12 +543,6 @@ function paywall(reason) {
   };
 }
 
-function openPayLink(url) {
-  if (tg?.openLink) tg.openLink(url, { try_instant_view: false });
-  else window.open(url, "_blank", "noopener");
-}
-
-/* Пока окно оплаты открыто, опрашиваем статус: колбэк может прийти позже. */
 function watchPayment(id) {
   let tries = 0;
   const timer = setInterval(async () => {
@@ -331,8 +558,8 @@ function watchPayment(id) {
         toast("Pro активирован");
         return;
       }
-    } catch (e) { /* молча: пользователь ещё платит */ }
-    if (tries > 100) clearInterval(timer);  // ~5 минут
+    } catch (e) { /* платёж ещё идёт */ }
+    if (tries > 100) clearInterval(timer);
   }, 3000);
 }
 
@@ -365,13 +592,59 @@ async function profileSheet() {
 }
 $("sb-foot").onclick = () => { closeSidebar(); profileSheet(); };
 
-/* ===================== данные ===================== */
+/* =====================================================
+   Данные
+   ===================================================== */
 function applyUser(user) {
   state.user = user;
   state.plan = user.plan;
   if (!state.modelPath) state.modelPath = user.model;
   renderHeader();
 }
+
+async function loadConfig() {
+  try {
+    state.cfg = await window.API.config();
+  } catch (e) { /* ссылки просто не покажутся */ }
+  renderSidebarActions();
+}
+
+/* Пустой экран нового чата. Стили инлайн: вёрстка не зависит
+   от того, какая версия ui.css сейчас в кеше WebView. */
+/* Пустой экран нового чата. Своя разметка и свои классы (.es-*),
+   чтобы правила .empty из app.css на него не действовали. */
+function emptyScreen() {
+  const name = (state.user?.name || "").split(" ")[0] || "друг";
+  const phrase = (GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
+    || "О чём поболтаем?").replace("{name}", name);
+  const m = model();
+  const energy = state.user?.energy ?? 0;
+  const max = state.user?.energy_max ?? 0;
+
+  const half = Math.ceil(HINTS.length / 2);
+  const chips = list => [...list, ...list]
+    .map(t => `<span class="mq-chip">${esc(t)}</span>`).join("");
+
+  const edge = side =>
+    `position:absolute;top:0;bottom:0;${side}:0;width:88px;z-index:3;pointer-events:none;`
+    + `background:linear-gradient(${side === "left" ? "90deg" : "270deg"},`
+    + `#000 0%,rgba(0,0,0,.92) 40%,rgba(0,0,0,0) 100%)`;
+
+  return `<div class="es-wrap">
+    <div class="es-title">${esc(phrase)}</div>
+    <div class="es-sub">Модель: <b>${esc(m ? m.name : "—")}</b> · ${energy} из ${max} энергии</div>
+    <div class="marquee" style="position:relative;margin-top:24px;overflow:hidden;
+         pointer-events:none;-webkit-mask-image:none;mask-image:none">
+      <div style="${edge("left")}"></div>
+      <div style="${edge("right")}"></div>
+      <div class="mq-row a">${chips(HINTS.slice(0, half))}</div>
+      <div class="mq-row b">${chips(HINTS.slice(half))}</div>
+    </div>
+  </div>`;
+}
+
+
+
 
 async function loadModels() {
   const data = await window.API.models();
@@ -432,7 +705,6 @@ async function newChat() {
   syncSend();
 }
 $("new-top").onclick = newChat;
-$("new-side").onclick = newChat;
 
 async function removeChat(id) {
   const wasActive = state.chatId === id;
@@ -452,11 +724,32 @@ async function removeChat(id) {
   }
 }
 
-/* ===================== вложения ===================== */
+/* =====================================================
+   Вложения
+   ===================================================== */
 function clearPending() {
   state.pending.forEach(a => a.url && URL.revokeObjectURL(a.url));
   state.pending = [];
   renderPending();
+}
+
+function renderPending() {
+  const box = $("pending");
+  box.hidden = !state.pending.length;
+  box.innerHTML = state.pending.map((a, i) => {
+    const inner = a.kind === "image"
+      ? `<img src="${a.url || ""}" alt="">`
+      : `<div class="chip">${I.doc}<span>${esc(a.name)}</span></div>`;
+    return `<div class="th ${a.uploading ? "up" : ""}">${inner}
+      <button class="rm" data-haptic="off" data-i="${i}" aria-label="Убрать">✕</button></div>`;
+  }).join("");
+  box.querySelectorAll(".rm").forEach(b => b.onclick = () => {
+    window.Haptic.press();
+    const [removed] = state.pending.splice(+b.dataset.i, 1);
+    if (removed?.url) URL.revokeObjectURL(removed.url);
+    renderPending();
+    syncSend();
+  });
 }
 
 $("attach").onclick = () => {
@@ -507,7 +800,9 @@ $("file-input").onchange = async e => {
   }
 };
 
-/* ===================== отправка ===================== */
+/* =====================================================
+   Композер
+   ===================================================== */
 const ta = $("ta");
 
 function syncSend() {
@@ -520,7 +815,7 @@ function syncSend() {
 function setSendMode(mode) {
   const b = $("send");
   b.classList.toggle("send", mode === "send");
-  b.innerHTML = mode === "send" ? ICON_UP : ICON_STOP;
+  b.innerHTML = mode === "send" ? I.send : I.stop;
   b.setAttribute("aria-label", mode === "send" ? "Отправить" : "Остановить");
 }
 
@@ -547,6 +842,9 @@ function stopStream() {
   }
 }
 
+/* =====================================================
+   Отправка и стрим
+   ===================================================== */
 async function send() {
   const text = ta.value.trim();
   const atts = state.pending.filter(a => a.id);
@@ -567,7 +865,6 @@ async function send() {
   }
 
   window.Haptic.press();
-  const chatId = state.chatId;
   const sentAtts = atts.map(a => ({ id: a.id, kind: a.kind, name: a.name, url: a.url }));
 
   state.messages.push({ role: "user", content: text, atts: sentAtts });
@@ -575,37 +872,90 @@ async function send() {
   ta.style.height = "auto";
   state.pending = state.pending.filter(a => !a.id);
   renderPending();
-  state.busy = true;
-  setSendMode("stop");
-  syncSend();
   stick = true;
   renderChat(true);
 
-  /* контейнер ответа: фаза → размышления → текст */
+  await runStream(state.chatId, {
+    text,
+    model: m.path,
+    attachments: atts.map(a => ({ id: a.id, kind: a.kind, name: a.name })),
+  });
+}
+
+async function regenerate() {
+  if (state.busy || !state.chatId) return;
+
+  /* последнее сообщение ассистента (включая ошибку) убираем из вида */
+  for (let i = state.messages.length - 1; i >= 0; i--) {
+    if (state.messages[i].role === "assistant") { state.messages.splice(i, 1); break; }
+  }
+  stick = true;
+  renderChat(true);
+  window.Haptic.press();
+
+  await runStream(state.chatId, { model: model()?.path }, { regenerate: true });
+}
+
+async function runStream(chatId, payload, { regenerate: isRetry = false } = {}) {
+  state.busy = true;
+  setSendMode("stop");
+  syncSend();
+
   const wrap = document.createElement("div");
-  wrap.className = "msg assistant";
+  wrap.className = "msg assistant streaming";
   wrap.innerHTML = `<div class="body"><div class="phase">
-    <span class="dots"><i></i><i></i><i></i></span><span class="lbl">подключаюсь</span></div></div>`;
+    <span class="lbl">подключаюсь</span></div></div>`;
   $("scroll").appendChild(wrap);
   toBottom(true);
 
-  const acc = { text: "", think: "", cites: [], phase: "connecting" };
+  const acc = {
+    text: "", think: "", cites: [],
+    phase: "connecting", label: "подключаюсь",
+    reasonOpen: REASON_OPEN_WHILE_STREAM,
+  };
   let raf = 0;
 
-  const paint = () => {
+  /* делегированный обработчик читает это, когда рассуждения
+     свернули во время стрима: иначе следующий кадр вернёт их обратно */
+  window.__accRef = acc;
+
+    const paint = () => {
     raf = 0;
     const body = wrap.querySelector(".body");
-    const phaseHTML = acc.text
-      ? ""
-      : `<div class="phase"><span class="dots"><i></i><i></i><i></i></span>
-         <span class="lbl">${esc(acc.label || "думает")}</span></div>`;
-    const thinkHtml = acc.think ? thinkHTML(acc.think, !acc.text) : "";
-    const textHtml = acc.text
-      ? window.MD.renderPartial(acc.text) + `<span class="caret"></span>`
-      : "";
-    body.innerHTML = phaseHTML + thinkHtml + textHtml;
+    const prevScroll = body.querySelector(".reason-scroll");
+    const wasBottom = prevScroll
+      ? prevScroll.scrollHeight - prevScroll.scrollTop - prevScroll.clientHeight < 40
+      : true;
+
+    let html = "";
+
+    /* пока нет ни текста, ни размышлений — только строка фазы */
+    if (!acc.think && !acc.text) {
+      html = `<div class="phase"><span class="lbl">${esc(acc.label)}</span></div>`;
+    } else {
+      if (acc.think) {
+        /* заголовок блока сам показывает фазу, отдельной строки быть не должно */
+        const head = acc.text ? "Рассуждения" : esc(acc.label);
+        html += `<div class="reason ${acc.reasonOpen ? "open" : ""}">
+          <button class="reason-head" data-reason-toggle>
+            <span class="${acc.text ? "" : "lbl"}">${head}</span>
+            <span class="arw">${I.chevron}</span>
+          </button>
+          <div class="reason-box"><div class="reason-scroll">${esc(acc.think)}</div></div>
+        </div>`;
+      }
+      if (acc.text) {
+        html += window.MD.renderPartial(acc.text) + `<span class="caret"></span>`;
+      }
+    }
+
+    body.innerHTML = html;
+
+    const box = body.querySelector(".reason-scroll");
+    if (box && wasBottom) box.scrollTop = box.scrollHeight;
     toBottom();
   };
+
   const schedule = () => { if (!raf) raf = requestAnimationFrame(paint); };
 
   const controller = new AbortController();
@@ -613,70 +963,66 @@ async function send() {
   let doneEvent = null;
   let errorEvent = null;
 
-  try {
-    await window.API.stream(chatId, {
-      text,
-      model: m.path,
-      attachments: atts.map(a => ({ id: a.id, kind: a.kind, name: a.name })),
-    }, ev => {
-      switch (ev.type) {
-        case "phase":
-          acc.phase = ev.phase;
-          acc.label = ev.label;
-          if (ev.phase === "typing") window.Haptic.soft();
-          schedule();
-          break;
-        case "reasoning":
-          acc.think += ev.text;
-          schedule();
-          break;
-        case "delta":
-          acc.text += ev.text;
-          schedule();
-          break;
-        case "citations":
-          acc.cites.push(...ev.items);
-          break;
-        case "meta":
-          if (ev.title) {
-            const c = state.chats.find(x => x.id === chatId);
-            if (c) { c.title = ev.title; renderChats(); }
-          }
-          break;
-        case "done":
-          doneEvent = ev;
-          break;
-        case "error":
-          errorEvent = ev;
-          break;
-      }
-    }, controller.signal);
-  } catch (e) {
-    if (e.name === "AbortError") {
-      errorEvent = null;  // прерывание пользователем: написанное сохранено на сервере
-    } else {
-      errorEvent = { message: e.message || "Сбой соединения", code: "network" };
+  const onEvent = ev => {
+    switch (ev.type) {
+      case "phase":
+        acc.phase = ev.phase;
+        acc.label = ev.label;
+        if (ev.phase === "typing") window.Haptic.soft();
+        schedule();
+        break;
+      case "reasoning":
+        acc.think += ev.text;
+        schedule();
+        break;
+      case "delta":
+        acc.text += ev.text;
+        schedule();
+        break;
+      case "citations":
+        acc.cites.push(...ev.items);
+        break;
+      case "meta":
+        if (ev.title) {
+          const c = state.chats.find(x => x.id === chatId);
+          if (c) { c.title = ev.title; renderChats(); }
+        }
+        break;
+      case "done":
+        doneEvent = ev;
+        break;
+      case "error":
+        errorEvent = ev;
+        break;
     }
+  };
+
+  try {
+    if (isRetry) await window.API.regenerate(chatId, payload, onEvent, controller.signal);
+    else await window.API.stream(chatId, payload, onEvent, controller.signal);
+  } catch (e) {
+    if (e.name === "AbortError") errorEvent = null;
+    else errorEvent = { message: e.message || "Сбой соединения", code: "network" };
   } finally {
     state.abort = null;
     state.busy = false;
     setSendMode("send");
     syncSend();
     if (raf) cancelAnimationFrame(raf);
+    window.__accRef = null;
   }
 
-  /* финальная отрисовка */
   const cites = acc.cites.length ? acc.cites : (doneEvent?.citations || []);
-  const body = wrap.querySelector(".body");
+  wrap.remove();
 
   if (errorEvent && !acc.text) {
-    wrap.remove();
-    showError(errorEvent);
+    const needPro = errorEvent.code === "need_pro" || errorEvent.code === "no_energy";
+    state.messages.push({
+      role: "assistant", content: errorEvent.message,
+      error: true, needPro,
+    });
+    window.Haptic.err();
   } else {
-    body.innerHTML = (acc.think ? thinkHTML(acc.think, false) : "")
-      + window.MD.render(acc.text)
-      + citesHTML(cites);
-    hydrateImages(body);
     state.messages.push({
       id: doneEvent?.message_id,
       role: "assistant",
@@ -687,6 +1033,8 @@ async function send() {
     if (errorEvent) toast(errorEvent.message);
     else window.Haptic.ok();
   }
+
+  renderChat(true);
 
   if (doneEvent) {
     state.user.energy = doneEvent.energy;
@@ -705,78 +1053,60 @@ async function send() {
   toBottom();
 }
 
-function showError(ev) {
-  const needPro = ev.code === "need_pro" || ev.code === "no_energy";
-  const el = document.createElement("div");
-  el.className = "msg assistant";
-  el.innerHTML = `<div class="msg-error">${ICON_WARN}<div>${esc(ev.message)}
-    ${needPro ? `<button data-up>Открыть Pro →</button>` : ""}</div></div>`;
-  $("scroll").appendChild(el);
-  el.querySelector("[data-up]")?.addEventListener("click", () => paywall(ev.message));
-  window.Haptic.err();
-  toBottom(true);
-}
-
-/* ===================== старт ===================== */
-function setupTelegram() {
-  if (!tg) return;
-  tg.ready();
-  tg.expand();
-  tg.setHeaderColor?.("#000000");
-  tg.setBackgroundColor?.("#000000");
-  tg.disableVerticalSwipes?.();
-  tg.onEvent?.("viewportChanged", () => toBottom());
-}
-
-function maintenanceScreen(message) {
-  boot(`<h1>Технические работы</h1><p>${esc(message || "Скоро вернёмся.")}</p>
-    <button class="cta" onclick="location.reload()">Обновить</button>`);
-}
-
-function authErrorScreen(e) {
-  const inTelegram = !!tg?.initData;
-  const text = inTelegram
-    ? (e.message || "Не удалось войти")
-    : "Откройте приложение через бота в Telegram.\nДля локальной проверки задайте DEV_AUTH_ID в .env";
-  boot(`<h1>Вход не выполнен</h1><p>${esc(text)}</p>
-    <button class="cta" onclick="location.reload()">Повторить</button>`);
-}
-
-async function start() {
-  setupTelegram();
-  setSendMode("send");
-  renderPending();
-  syncSend();
-
-  let data;
-  try {
-    data = await window.API.auth();
-  } catch (e) {
-    authErrorScreen(e);
+/* =====================================================
+   Делегированные обработчики
+   ===================================================== */
+document.addEventListener("click", async e => {
+  /* развернуть/свернуть рассуждения */
+  const rt = e.target.closest("[data-reason-toggle]");
+  if (rt) {
+    const block = rt.closest(".reason");
+    block.classList.toggle("open");
+    window.Haptic.select();
+    const open = block.classList.contains("open");
+    if (open) {
+      const box = block.querySelector(".reason-scroll");
+      if (box) box.scrollTop = box.scrollHeight;
+    }
+    /* во время стрима запоминаем выбор, иначе следующий кадр его сбросит */
+    if (block.closest(".streaming") && window.__accRef) {
+      window.__accRef.reasonOpen = open;
+    }
     return;
   }
 
-  applyUser(data.user);
-  state.maintenance = data.maintenance;
-  if (data.maintenance?.enabled && !data.user.is_admin) {
-    maintenanceScreen(data.maintenance.message);
+  /* копировать */
+  const cp = e.target.closest("[data-copy]");
+  if (cp) {
+    const idx = +cp.dataset.copy;
+    const msg = state.messages[idx];
+    if (!msg) return;
+    const ok = await copyText(msg.content || "");
+    if (ok) {
+      window.Haptic.ok();
+      cp.classList.add("done");
+      cp.innerHTML = I.check;
+      setTimeout(() => { cp.classList.remove("done"); cp.innerHTML = I.copy; }, 1500);
+    } else {
+      window.Haptic.err();
+      toast("Буфер недоступен");
+    }
     return;
   }
 
-  try {
-    await loadModels();
-    await loadChats();
-  } catch (e) {
-    boot(`<h1>Сервер недоступен</h1><p>${esc(e.message || "")}</p>
-      <button class="cta" onclick="location.reload()">Повторить</button>`);
+  /* перегенерировать */
+  if (e.target.closest("[data-retry]")) {
+    await regenerate();
     return;
   }
 
-  if (state.chats.length) await openChat(state.chats[0].id, { silent: true });
-  else await newChat();
-
-  boot("", false);
-}
+  /* пейволл из ошибки */
+  const pw = e.target.closest("[data-paywall]");
+  if (pw) {
+    const msg = state.messages[+pw.closest(".msg")?.dataset.idx];
+    paywall(msg?.content);
+  }
+});
 
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
@@ -784,7 +1114,6 @@ document.addEventListener("keydown", e => {
   else if (state.sidebar) closeSidebar();
 });
 
-/* возврат из окна оплаты — перепроверяем тариф */
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState !== "visible" || !state.user) return;
   try {
@@ -799,6 +1128,75 @@ document.addEventListener("visibilitychange", async () => {
     }
   } catch (e) {}
 });
+
+window.addEventListener("resize", applyInsets);
+
+/* =====================================================
+   Старт
+   ===================================================== */
+function maintenanceScreen(message) {
+  boot(`<h1>Технические работы</h1><p>${esc(message || "Скоро вернёмся.")}</p>
+    <button class="cta" onclick="location.reload()">Обновить</button>`);
+}
+
+function authErrorScreen(e) {
+  const inTelegram = !!tg?.initData;
+  const reason = e?.message ? `<p>${esc(e.message)}</p>` : "";
+  const hint = inTelegram
+    ? ""
+    : `<p>Откройте приложение через бота в Telegram.
+         Для локальной проверки задайте DEV_AUTH_ID в .env и перезапустите сервер.</p>`;
+  boot(`<h1>Вход не выполнен</h1>${reason}${hint}
+    <button class="cta" onclick="location.reload()">Повторить</button>`);
+  console.error("auth failed", e);
+}
+
+async function start() {
+  mountIcons();
+
+  /* несовместимость клиента Telegram не должна блокировать приложение */
+  try {
+    setupTelegram();
+  } catch (e) {
+    console.warn("Telegram init failed", e);
+    applyInsets();
+  }
+
+  setSendMode("send");
+  renderSidebarActions();
+  renderPending();
+  syncSend();
+
+  let data;
+  try {
+    data = await window.API.auth();
+  } catch (e) {
+    authErrorScreen(e);
+    return;
+  }
+
+  applyUser(data.user);
+  if (data.maintenance?.enabled && !data.user.is_admin) {
+    maintenanceScreen(data.maintenance.message);
+    return;
+  }
+
+  try {
+    await loadModels();
+    await loadChats();
+    await loadConfig();
+  } catch (e) {
+    boot(`<h1>Сервер недоступен</h1><p>${esc(e.message || "")}</p>
+      <button class="cta" onclick="location.reload()">Повторить</button>`);
+    return;
+  }
+
+  if (state.chats.length) await openChat(state.chats[0].id, { silent: true });
+  else await newChat();
+
+  applyInsets();
+  boot("", false);
+}
 
 start();
 })();
