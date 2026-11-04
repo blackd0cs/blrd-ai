@@ -4,7 +4,7 @@
 {% macro donut(d, label, sub) %}
 <svg class="donut" width="150" height="150" viewBox="0 0 150 150">
   <circle cx="75" cy="75" r="{{ d.r }}" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="15"/>
-  {% for it in d.items %}
+  {% for it in d['items'] %}
     {% if it.value %}
     <circle cx="75" cy="75" r="{{ d.r }}" fill="none" stroke="{{ it.color }}" stroke-width="15"
       stroke-dasharray="{{ it.dash }} {{ it.gap }}" stroke-dashoffset="{{ it.offset }}"
@@ -15,7 +15,7 @@
   <text x="75" y="92" text-anchor="middle" font-size="11.5" class="sub">{{ sub }}</text>
 </svg>
 <div class="legend">
-  {% for it in d.items %}
+  {% for it in d['items'] %}
   <div class="it"><span class="dot" style="background:{{ it.color }}"></span>
     <span class="nm">{{ it.name }}</span><span class="vl">{{ it.value }} · {{ it.pct }}%</span></div>
   {% endfor %}

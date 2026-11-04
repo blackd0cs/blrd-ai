@@ -185,18 +185,61 @@ class _Catalog:
         return path.read_text("utf-8") if path.exists() else ""
 
     def save_text(self, which: str, text: str) -> None:
-        """Пишет YAML только если он парсится и содержит нужный корень."""
+        """Пишет YAML только если он парсится и проходит полную проверку."""
         data = yaml.safe_load(text) or {}
-        if which == "models" and "models" not in data:
-            raise ValueError("В models.yml нет корневого ключа 'models'")
-        if which == "plans" and "plans" not in data:
-            raise ValueError("В plans.yml нет корневого ключа 'plans'")
-        path = self.models_file if which == "models" else self.plans_file
-        backup = path.with_suffix(path.suffix + ".bak")
-        if path.exists():
-            backup.write_text(path.read_text("utf-8"), "utf-8")
-        path.write_text(text, "utf-8")
-        self.reload()
+        if which == "models":
+            items = data.get("models")
+            if not isinstance(items, list) or not items:
+                raise ValueError("в models.yml нужен непустой список 'models'")
+            seen: set[str] = set()
+            for i, m in enumerate(items, 1):
+                if not isinstance(m, dict):
+                    raise ValueError(f"модель #{i}: должна быть набором полей key: value")
+                for key in ("path", "name", "multiplier", "plans"):
+                    if key not in m:
+                        raise ValueError(f"модель #{i}: нет обязательного поля '{key}'")
+                path = str(m["path"]).strip()
+                if not path:
+                    raise ValueError(f"модель #{i}: пустой path")
+                if path in seen:
+                    raise ValueError(f"модель #{i}: путь '{path}' повторяется")
+                seen.add(path)
+                try:
+                    mult = float(m["multiplier"])
+                except (TypeError, ValueError):
+                    raise ValueError(f"{path}: multiplier должен быть числом, а не '{m['multiplier']}'")
+                if mult < 0:
+                    raise ValueError(f"{path}: multiplier не может быть отрицательным")
+                plans = m["plans"]
+                if not isinstance(plans, list) or not plans:
+                    raise ValueError(f"{path}: plans должен быть списком, например [free, pro]")
+                known = set((yaml.safe_load(self.raw_text("plans")) or {}).get("plans") or {})
+                bad = [str(x) for x in plans if str(x) not in known]
+                if bad:
+                    raise ValueError(f"{path}: неизвестные тарифы {bad}, есть {sorted(known)}")
+            if not any(m.get("plans") and "free" in m["plans"] and float(m.get("multiplier", 1)) == 0
+                       for m in items):
+                raise ValueError("нужна хотя бы одна бесплатная модель с тарифом free")
+        elif which == "plans":
+            plans = data.get("plans")
+            if not isinstance(plans, dict) or "free" not in plans:
+                raise ValueError("в plans.yml нужен ключ 'plans' с тарифом 'free'")
+        else:
+            raise ValueError(f"неизвестный файл '{which}'")
+
+        path_file = self.models_file if which == "models" else self.plans_file
+        backup = path_file.with_suffix(path_file.suffix + ".bak")
+        if path_file.exists():
+            backup.write_text(path_file.read_text("utf-8"), "utf-8")
+        path_file.write_text(text, "utf-8")
+        try:
+            self.reload()
+        except Exception as e:
+            # откат: иначе приложение не поднимется после перезапуска
+            if backup.exists():
+                path_file.write_text(backup.read_text("utf-8"), "utf-8")
+                self.reload()
+            raise ValueError(f"конфиг отклонён и возвращён прежний: {e}") from e
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:

@@ -37,12 +37,12 @@ def _render(request: Request, name: str, ctx: dict[str, Any]) -> HTMLResponse:
     ctx.setdefault("err", request.query_params.get("err"))
     ctx["request"] = request
     ctx["weak_password"] = settings.admin_password in ("admin", "change-me", "")
-    try:
-        # Starlette ≥ 0.29: request идёт первым аргументом
+    import inspect
+
+    params = list(inspect.signature(templates.TemplateResponse).parameters)
+    if params and params[0] == "request":
         return templates.TemplateResponse(request, name, ctx)
-    except TypeError:
-        # старые версии принимали только (name, context)
-        return templates.TemplateResponse(name, ctx)
+    return templates.TemplateResponse(name, ctx)
 
 
 

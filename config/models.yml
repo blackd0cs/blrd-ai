@@ -8,8 +8,8 @@
 # default     — модель по умолчанию для тарифа
 
 models:
-  - path: "Qwen3.8 Max"
-    name: "qwen/qwen3.8-max"
+  - path: "qwen/qwen3.7-plus"
+    name: "Qwen3.7 Plus"
     short: "Qwen"
     multiplier: 0
     plans: [free, pro]
@@ -19,7 +19,7 @@ models:
     context: 128000
     default: true
 
-  - path: "ag/gemini-3.1-flash-lite-preview"
+  - path: "ag/gemini-3.8-flash-medium"
     name: "Gemini 3.1 Flash-Lite"
     short: "Gemini"
     multiplier: 0.25
@@ -39,9 +39,9 @@ models:
     web_search: true
     context: 400000
 
-  - path: "cc/claude-opus-5"
-    name: "Claude Opus 5"
-    short: "Opus 5"
+  - path: "glm/glm-5.3-flash"
+    name: "GLM-5.3-Flash"
+    short: "GLM 5.3"
     multiplier: 2.5
     plans: [pro]
     vision: true
