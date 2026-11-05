@@ -250,3 +250,27 @@
 /* в флекс-колонке .marquee сжимается до ширины контента,
    из-за этого градиенты по краям уезжают за экран */
 .es-wrap .marquee{align-self:stretch;width:100%;max-width:100%;overflow:hidden}
+
+/* Mobile-friendly улучшения */
+@media (max-width: 480px) {
+  .header { padding-left: 8px; padding-right: 8px; }
+  .model-pill { font-size: 17px; max-width: 60%; }
+  .scroll { padding-left: 12px; padding-right: 12px; }
+  .bubble { padding: 12px 14px; font-size: 16px; }
+  .msg.user .col { max-width: 92%; }
+  .composer { padding-left: 12px; padding-right: 12px; }
+  .c-inner textarea { min-height: 40px; font-size: 16px; }
+  .round { width: 40px; height: 40px; }
+  .sb-top h2 { font-size: 18px; }
+  .chat-item { font-size: 16px; padding: 11px 10px; }
+  .sheet { border-radius: 20px 20px 0 0; }
+  .m-row { padding: 12px 10px; }
+  .toast { max-width: 90%; font-size: 14px; }
+  .latex-display, .latex-block { padding: 10px 12px; font-size: 14px; }
+}
+
+/* Предотвращаем зум на iOS при тапе на input/textarea */
+@media (pointer: fine) {
+  input, textarea, select { font-size: 16px; }
+}
+

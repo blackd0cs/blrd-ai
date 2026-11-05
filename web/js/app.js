@@ -154,22 +154,26 @@ function boot(html, show = true) {
 }
 
 async function copyText(text) {
+  // Пробуем современный API
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);
       return true;
-    } catch (e) { /* ниже запасной путь */ }
+    } catch (e) { console.warn("clipboard writeText failed:", e); }
   }
+  // Запасной путь для старых браузеров и Telegram WebView
   try {
     const ta = document.createElement("textarea");
     ta.value = text;
-    ta.style.cssText = "position:fixed;left:-9999px";
+    ta.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0.01";
     document.body.appendChild(ta);
+    ta.focus();
     ta.select();
     const ok = document.execCommand("copy");
     ta.remove();
     return ok;
   } catch (e) {
+    console.warn("execCommand copy failed:", e);
     return false;
   }
 }
@@ -228,10 +232,10 @@ function reasonHTML(text, open) {
 
 function citesHTML(items) {
   if (!items || !items.length) return "";
-  const rows = items.slice(0, 10).map((c, i) =>
+  const rows = items.slice(0, 3).map((c, i) =>
     `<a href="${esc(c.url)}" target="_blank" rel="noopener">
        <span class="n">${i + 1}.</span><span class="t">${esc(c.title || c.url)}</span></a>`).join("");
-  return `<div class="cites">${rows}</div>`;
+  return `<div class="cites"><div class="cites-title">Источники</div>${rows}</div>`;
 }
 
 function messageHTML(m, idx) {

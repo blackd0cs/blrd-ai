@@ -21,7 +21,21 @@ window.MD = (() => {
         + `<code>${esc(body.replace(/\n+$/, ""))}</code></pre>`);
       return `\u0000${stash.length - 1}\u0000`;
     });
-    t = t.replace(/`([^`\n]+)`/g, (m, c) => {
+    /* Обработка LaTeX формул */
+    // Формулы в квадратных скобках [ ... ] или \[ ... \]
+    t = t.replace(/\[\s*\\??\[((?:[^\\\]]|\\.)+)\]\s*\]/g, function(m, formula) {
+      return '<div class="latex-display">\\(' + esc(formula.trim()) + '\\)</div>';
+    });
+    
+    // Инлайн формулы в круглых скобках \( ... \) если похоже на LaTeX
+    t = t.replace(/\\\(([^)]+)\\\)/g, function(m, formula) {
+      if (/[\\_^{}\\d]/.test(formula)) {
+        return '<span class="latex-inline">\\(' + esc(formula) + '\\)</span>';
+      }
+      return m;
+    });
+    
+t = t.replace(/`([^`\n]+)`/g, (m, c) => {
       stash.push(`<code class="inline">${esc(c)}</code>`);
       return `\u0000${stash.length - 1}\u0000`;
     });

@@ -286,8 +286,7 @@ def _footer(ev: dict[str, Any], model_path: str, truncated: bool = False) -> str
     if cost:
         parts.append(f"−{cost:g} энергии")
     parts.append(f"осталось {ev.get('energy', 0)}")
-    if ev.get("searches"):
-        parts.append(f"поисков: {ev['searches']}")
+    # searches больше не показываем в footer - источники отображаются отдельно
     if truncated:
         parts.append("ответ прерван провайдером")
     return " · ".join(parts) + "</i>"
