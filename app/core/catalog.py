@@ -101,12 +101,12 @@ class _Catalog:
                         path=str(item["path"]),
                         name=str(item.get("name") or item["path"]),
                         short=str(item.get("short") or item.get("name") or item["path"]),
-                        multiplier=float(item.get("multiplier", 1)),
-                        plans=tuple(item.get("plans") or ["pro"]),
+                        multiplier=float(_num(item.get("multiplier"), 1)),
+                        plans=tuple(str(x) for x in (item.get("plans") or ["pro"])),
                         vision=bool(item.get("vision", False)),
                         reasoning=bool(item.get("reasoning", False)),
                         web_search=bool(item.get("web_search", False)),
-                        context=int(item.get("context", 128_000)),
+                        context=int(_num(item.get("context"), 128_000)),
                         default=bool(item.get("default", False)),
                     )
                 )
@@ -116,12 +116,12 @@ class _Catalog:
                 plans[code] = PlanSpec(
                     code=code,
                     title=str(item.get("title", code.title())),
-                    energy=int(item.get("energy", 0)),
-                    price_rub=int(item.get("price_rub", 0)),
-                    days=int(item.get("days", 0)),
-                    refill_days=int(item.get("refill_days", 0)),
-                    max_attachments=int(item.get("max_attachments", 0)),
-                    context_messages=int(item.get("context_messages", 10)),
+                    energy=int(_num(item.get("energy"), 0)),
+                    price_rub=int(_num(item.get("price_rub"), 0)),
+                    days=int(_num(item.get("days"), 0)),
+                    refill_days=int(_num(item.get("refill_days"), 0)),
+                    max_attachments=int(_num(item.get("max_attachments"), 0)),
+                    context_messages=int(_num(item.get("context_messages"), 10)),
                     web_search=bool(item.get("web_search", False)),
                     features=tuple(item.get("features") or ()),
                 )
@@ -129,7 +129,7 @@ class _Catalog:
             self._models = models
             self._plans = plans
             self._system_prompt = str(raw_models.get("system_prompt", "")).strip()
-            self._energy_unit = int(raw_plans.get("energy_unit", settings.tokens_per_energy))
+            self._energy_unit = int(_num(raw_plans.get("energy_unit"), settings.tokens_per_energy))
             for p in (self.models_file, self.plans_file):
                 if p.exists():
                     self._mtimes[p] = p.stat().st_mtime
@@ -205,7 +205,7 @@ class _Catalog:
                     raise ValueError(f"модель #{i}: путь '{path}' повторяется")
                 seen.add(path)
                 try:
-                    mult = float(m["multiplier"])
+                    mult = float(_num(m["multiplier"], 1))
                 except (TypeError, ValueError):
                     raise ValueError(f"{path}: multiplier должен быть числом, а не '{m['multiplier']}'")
                 if mult < 0:
@@ -240,6 +240,13 @@ class _Catalog:
                 path_file.write_text(backup.read_text("utf-8"), "utf-8")
                 self.reload()
             raise ValueError(f"конфиг отклонён и возвращён прежний: {e}") from e
+
+
+def _num(value, default):
+    """YAML null и пустая строка означают «не задано»."""
+    if value is None or value == "":
+        return default
+    return value
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
