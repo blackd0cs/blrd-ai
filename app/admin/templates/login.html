@@ -20,7 +20,11 @@ button{width:100%;background:#f2f2f2;color:#000;border:0;border-radius:9px;paddi
 <form method="post" action="/admin/login">
   <h1>Админ-панель</h1>
   <p>blrd ai</p>
-  {% if err %}<div class="err">{{ err }}</div>{% endif %}
+  {% if err == "invalid_password" %}
+    <div class="err">Неверный пароль</div>
+    {% elif err %}
+    <div class="err">{{ err }}</div>
+    {% endif %}
   <input type="password" name="password" placeholder="Пароль" autofocus autocomplete="current-password" />
   <button>Войти</button>
 </form>

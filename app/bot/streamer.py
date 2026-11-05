@@ -86,12 +86,7 @@ class Streamer:
         """Финальный рендер: длинный ответ уезжает дополнительными сообщениями."""
         async with self._lock:
             body = md_to_html(self.text) if self.text else "<i>Пустой ответ модели.</i>"
-            if citations:
-                links = "\n".join(
-                    f"{i + 1}. <a href=\"{c['url']}\">{_short(c.get('title') or c['url'])}</a>"
-                    for i, c in enumerate(citations[:8])
-                )
-                body += f"\n\n<b>Источники</b>\n{links}"
+            # Источники теперь отображаются только в web интерфейсе
             chunks = split_html(body) or [body]
 
             await self._edit(chunks[0] + (f"\n\n{footer}" if footer and len(chunks) == 1 else ""), None)
