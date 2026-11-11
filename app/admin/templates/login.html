@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Вход · blrd ai</title>
+<style>
+body{margin:0;height:100vh;display:grid;place-items:center;background:#0b0b0d;color:#ececed;
+  font:15px/1.5 -apple-system,"Segoe UI",Inter,sans-serif}
+form{background:#131317;border:1px solid #222228;border-radius:16px;padding:26px;width:min(320px,calc(100vw - 32px))}
+h1{font-size:20px;margin:0 0 4px}p{color:#8d8d96;margin:0 0 18px;font-size:14px}
+input{width:100%;background:#0d0d10;border:1px solid #222228;border-radius:9px;padding:11px;
+  color:#ececed;font:inherit;margin-bottom:12px}
+button{width:100%;background:#f2f2f2;color:#000;border:0;border-radius:9px;padding:11px;
+  font:inherit;font-weight:600;cursor:pointer}
+.err{background:#2a1316;color:#ff6b6b;border:1px solid #452026;border-radius:9px;
+  padding:10px 12px;margin-bottom:14px;font-size:14px}
+</style>
+</head>
+<body>
+<form method="post" action="/admin/login">
+  <h1>Админ-панель</h1>
+  <p>blrd ai</p>
+  {% if err == "invalid_password" %}
+    <div class="err">Неверный пароль</div>
+    {% elif err %}
+    <div class="err">{{ err }}</div>
+    {% endif %}
+  <input type="password" name="password" placeholder="Пароль" autofocus autocomplete="current-password" />
+  <button>Войти</button>
+</form>
+</body>
+</html>

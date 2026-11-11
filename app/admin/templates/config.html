@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Модели и тарифы{% endblock %}
+{% block body %}
+<h1>Модели и тарифы</h1>
+
+<div class="card">
+  <div class="tbl-wrap"><table>
+    <tr><th>Модель</th><th>Производитель</th><th>Путь API</th><th>Коэффициент</th><th>Тарифы</th><th>Возможности</th></tr>
+    {% for m in models %}
+      <tr><td>{{ m.name }}
+          {% if m.branded %}<span class="tag adm">фирменная</span>{% endif %}
+          {% if m.popular %}<span class="tag pro">популярная</span>{% endif %}</td>
+        <td class="dim">{{ m.vendor }}</td>
+        <td class="mono">{{ m.api_path }}</td>
+        <td>{{ 'бесплатно' if m.multiplier == 0 else '×' ~ m.multiplier }}</td>
+        <td>{{ m.plans|join(', ') }}</td>
+        <td class="dim">{% if m.vision %}картинки{% endif %}
+          {% if m.reasoning %}· рассуждения{% endif %}
+          {% if m.web_search %}· веб-поиск{% endif %}
+          {% if m.default %}· по умолчанию{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+
+<div class="card">
+  <div class="split">
+    <h2>Фирменные модели</h2>
+    {% if edit.get('original') %}<a class="btn ghost sm" href="/admin/config">+ Новая</a>{% endif %}
+  </div>
+  <p class="dim" style="margin:0 0 12px">Своё название и системный промпт поверх обычной модели. Возможности (картинки, поиск, рассуждения) берутся у базовой модели. Промпт пользователям не показывается.</p>
+
+  <div class="tbl-wrap"><table>
+    <tr><th>Название</th><th>ID</th><th>База</th><th>Коэфф.</th><th>Тарифы</th><th></th></tr>
+    {% for b in branded %}
+      <tr>
+        <td>{{ b.get('name') }}{% if b.get('popular') %} <span class="tag pro">популярная</span>{% endif %}</td>
+        <td class="mono">{{ b.get('path') }}</td>
+        <td class="mono">{{ b.get('upstream') }}
+          {% if b.get('upstream') not in base_paths %}<span class="tag ban">нет в models.yml</span>{% endif %}</td>
+        <td>×{{ b.get('multiplier') }}</td>
+        <td>{{ (b.get('plans') or [])|join(', ') }}</td>
+        <td class="nowrap">
+          <a class="btn ghost sm" href="/admin/config?edit={{ b.get('path')|urlencode }}">Изменить</a>
+          <form class="inline" method="post" action="/admin/branded/delete"
+                onsubmit="return confirm('Удалить фирменную модель?')">
+            <input type="hidden" name="path" value="{{ b.get('path') }}" />
+            <button class="btn danger sm">Удалить</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="dim">Пока нет ни одной</td></tr>
+    {% endfor %}
+  </table></div>
+
+  <h2 style="margin-top:22px">{% if edit.get('original') %}Изменить «{{ edit.get('name') }}»{% else %}Новая фирменная модель{% endif %}</h2>
+  <form method="post" action="/admin/branded">
+    <input type="hidden" name="original" value="{{ edit.get('original') or '' }}" />
+    <div class="row">
+      <div><label>Название</label>
+        <input name="name" required maxlength="60" value="{{ edit.get('name', '') }}" /></div>
+      <div><label>Короткое имя в шапке</label>
+        <input name="short" maxlength="24" value="{{ edit.get('short', '') }}" /></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div><label>ID (латиница, например blrd/coder)</label>
+        <input name="path" required maxlength="80" autocapitalize="off" value="{{ edit.get('path', '') }}" /></div>
+      <div><label>Базовая модель</label>
+        <select name="upstream">
+          {% for m in base_models %}
+            <option value="{{ m.path }}" {{ 'selected' if m.path == edit.get('upstream') }}>{{ m.vendor }} · {{ m.name }}</option>
+          {% endfor %}
+        </select></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div><label>Коэффициент энергии (0 — бесплатно)</label>
+        <input name="multiplier" inputmode="decimal" value="{{ edit.get('multiplier', 1) }}" /></div>
+      <div><label>Доступ</label>
+        <div class="checks">
+          {% for p in plan_codes %}
+            <label class="chk"><input type="checkbox" name="plans" value="{{ p }}"
+              {{ 'checked' if p in (edit.get('plans') or ['pro']) }} /> {{ p }}</label>
+          {% endfor %}
+          <label class="chk"><input type="checkbox" name="popular" {{ 'checked' if edit.get('popular') }} /> в «Популярном»</label>
+        </div></div>
+    </div>
+    <div class="field" style="margin-top:12px"><label>Описание под названием</label>
+      <input name="description" maxlength="160" value="{{ edit.get('description', '') }}" /></div>
+    <div class="field"><label>Системный промпт</label>
+      <textarea name="system_prompt" rows="12">{{ edit.get('system_prompt', '') }}</textarea></div>
+    <button class="btn">Сохранить</button>
+  </form>
+</div>
+
+<div class="grid c2">
+  <div class="card">
+    <h2 style="margin-top:0">models.yml</h2>
+    <form method="post" action="/admin/config">
+      <input type="hidden" name="which" value="models" />
+      <div class="field"><textarea name="text" rows="26">{{ models_text }}</textarea></div>
+      <button class="btn">Сохранить models.yml</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">plans.yml</h2>
+    <form method="post" action="/admin/config">
+      <input type="hidden" name="which" value="plans" />
+      <div class="field"><textarea name="text" rows="26">{{ plans_text }}</textarea></div>
+      <button class="btn">Сохранить plans.yml</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <p class="dim" style="margin:0">В models.yml можно добавить модели <span class="mono">popular: true</span> (раздел «Популярное»), <span class="mono">vendor: "…"</span> (если производитель определился неверно) и <span class="mono">description: "…"</span>. Файл сохраняется только если YAML разбирается; предыдущая версия остаётся рядом как <span class="mono">.bak</span>. Путь модели должен совпадать с id из <span class="mono">GET /v1/models</span>.</p>
+</div>
+{% endblock %}

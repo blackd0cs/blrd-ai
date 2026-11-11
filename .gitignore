@@ -1,0 +1,10 @@
+
+.env
+data/
+backups/
+config/branded.yml
+config/*.bak
+.venv/
+__pycache__/
+*.pyc
+app/data/

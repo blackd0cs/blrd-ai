@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Чаты{% endblock %}
+{% block body %}
+<div class="split">
+  <h1>{% if owner %}Чаты · {{ owner.display_name }}{% else %}Все чаты{% endif %}
+    <span class="dim">· {{ total }}</span></h1>
+  {% if owner %}<a class="btn ghost sm" href="/admin/users/{{ owner.id }}">← К пользователю</a>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="tbl-wrap"><table>
+    <tr><th>Чат</th>{% if not owner %}<th>Пользователь</th>{% endif %}
+      <th>Модель</th><th>Сообщений</th><th>Где</th><th>Обновлён</th><th></th></tr>
+    {% for r in rows %}
+      <tr>
+        <td><a href="/admin/chats/{{ r.chat.id }}">{{ r.chat.title }}</a></td>
+        {% if not owner %}
+        <td><a href="/admin/users/{{ r.user.id }}">{{ r.user.display_name }}</a>
+          <div class="dim mono">{{ r.user.id }}</div></td>
+        {% endif %}
+        <td class="mono dim">{{ r.chat.model or '—' }}</td>
+        <td>{{ r.messages }}</td>
+        <td class="dim">{{ 'бот' if r.chat.source == 'bot' else 'веб' }}</td>
+        <td class="dim nowrap">{{ r.chat.updated_at|dtfmt }}</td>
+        <td class="nowrap"><a class="btn ghost sm" href="/admin/chats/{{ r.chat.id }}">Открыть</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="dim">Чатов нет</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+
+{% if pages > 1 %}
+<div class="card split">
+  <span class="dim">Страница {{ page }} из {{ pages }}</span>
+  <span>
+    {% set base = '/admin/chats?user_id=' ~ user_id if user_id else '/admin/chats?' %}
+    {% if page > 1 %}<a class="btn ghost sm" href="{{ base }}&page={{ page-1 }}">Назад</a>{% endif %}
+    {% if page < pages %}<a class="btn ghost sm" href="{{ base }}&page={{ page+1 }}">Вперёд</a>{% endif %}
+  </span>
+</div>
+{% endif %}
+{% endblock %}

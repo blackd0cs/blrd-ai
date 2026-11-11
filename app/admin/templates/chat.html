@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ chat.title }}{% endblock %}
+{% block body %}
+<div class="split">
+  <h1>{{ chat.title }}</h1>
+  <span class="nowrap">
+    <a class="btn ghost sm" href="/admin/chats?user_id={{ chat.user_id }}">← Чаты пользователя</a>
+    <form class="inline" method="post" action="/admin/chats/{{ chat.id }}/delete"
+          onsubmit="return confirm('Удалить чат вместе с перепиской?')">
+      <button class="btn danger sm">Удалить чат</button></form>
+  </span>
+</div>
+
+<div class="grid c4">
+  <div class="kpi"><div class="v">{{ messages|length }}</div><div class="l">Сообщений</div></div>
+  <div class="kpi"><div class="v">{{ spent_energy }}</div><div class="l">Энергии списано</div>
+    <div class="s">{{ spent_tokens }} базовых токенов</div></div>
+  <div class="kpi"><div class="v" style="font-size:19px">{{ 'бот' if chat.source == 'bot' else 'веб' }}</div>
+    <div class="l">Источник</div><div class="s mono">{{ chat.model or '—' }}</div></div>
+  <div class="kpi"><div class="v" style="font-size:17px">
+      {% if user %}<a href="/admin/users/{{ user.id }}">{{ user.display_name }}</a>{% else %}—{% endif %}</div>
+    <div class="l">Пользователь</div>
+    <div class="s">{{ chat.created_at|dtfmt }}</div></div>
+</div>
+
+<div class="card">
+  <div class="talk">
+    {% for m in messages %}
+      {% if m.role == 'user' %}
+        <div class="bub u">
+          {% if m.attachments %}
+            <div class="atts">
+              {% for a in m.attachments %}
+                {% if a.kind == 'image' %}
+                  <img class="ph" src="/api/files/{{ a.id }}" alt="" loading="lazy"
+                       onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'att',textContent:'🖼 {{ a.name }}'}))">
+                {% else %}
+                  <span class="att">📄 {{ a.name }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% endif %}
+          {{ m.content }}
+          <div class="meta"><span>{{ m.created_at|dtfmt }}</span></div>
+        </div>
+      {% else %}
+        <div class="bub a">
+          {% if m.reasoning %}<div class="think">{{ m.reasoning }}</div>{% endif %}
+          {{ m.content }}
+          <div class="meta">
+            <span>{{ m.created_at|dtfmt }}</span>
+            <span class="mono">{{ m.model or '—' }}</span>
+            <span>{{ m.tokens_in }}→{{ m.tokens_out }} токенов</span>
+            <span>−{{ m.base_cost }}</span>
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <p class="dim">В чате нет сообщений</p>
+    {% endfor %}
+  </div>
+</div>
+<p class="dim">Переписка видна только администратору. Картинки отдаются через API и доступны по правам админа.</p>
+{% endblock %}

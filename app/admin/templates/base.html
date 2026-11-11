@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{% block title %}Админка{% endblock %} · БЕЛЕБАЛАРДЫХ AI</title>
+<style>
+:root{
+  --bg:#07070a; --text:#ececed; --dim:#8d8d96; --dim2:#5e5e68;
+  --line:rgba(255,255,255,.08);
+  --glass:rgba(24,24,29,.62); --hi:rgba(255,255,255,.13);
+  --accent:#5b9dff; --accent2:#9b6cff; --ok:#3ddc84; --warn:#ffb340; --err:#ff6b6b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:var(--bg);color:var(--text);
+  font:15px/1.5 -apple-system,"Segoe UI",Inter,Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+.glass{
+  position:relative;background:var(--glass);border:1px solid var(--line);
+  backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
+  box-shadow:0 1px 0 var(--hi) inset,0 -1px 0 rgba(0,0,0,.3) inset,0 14px 40px rgba(0,0,0,.42);
+  overflow:hidden;
+}
+.glass::after{
+  content:"";position:absolute;left:0;right:0;top:0;height:46%;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,0));
+}
+
+header.top{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:11px 20px;margin:0;border:0;border-bottom:1px solid var(--line);
+  background:rgba(10,10,13,.72);
+  backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.02em}
+.brand img{width:28px;height:28px;border-radius:8px;object-fit:cover;background:#17171a}
+nav{display:flex;gap:3px;flex-wrap:wrap;flex:1}
+nav a{padding:7px 13px;border-radius:11px;color:var(--dim);font-weight:500;transition:.16s}
+nav a:hover{background:rgba(255,255,255,.06);color:var(--text);text-decoration:none}
+nav a.on{background:rgba(255,255,255,.1);color:#fff;box-shadow:0 1px 0 var(--hi) inset}
+
+main{max-width:1240px;margin:0 auto;padding:22px 20px 80px}
+h1{font-size:24px;margin:0 0 18px;letter-spacing:-.025em}
+h2{font-size:16px;margin:0 0 14px;letter-spacing:-.015em}
+.card{border-radius:18px;padding:18px;margin-bottom:14px;
+  position:relative;background:var(--glass);border:1px solid var(--line);
+  backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
+  box-shadow:0 1px 0 var(--hi) inset,0 14px 40px rgba(0,0,0,.4)}
+.grid{display:grid;gap:12px}
+.grid.c4{grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr))}
+.grid.c3{grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))}
+.grid.c2{grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr))}
+
+
+.kpi{border-radius:16px;padding:16px 18px;
+  background:var(--glass);border:1px solid var(--line);
+  backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);
+  box-shadow:0 1px 0 var(--hi) inset}
+.kpi .v{font-size:28px;font-weight:700;letter-spacing:-.035em;line-height:1.05}
+.kpi .l{color:var(--dim);font-size:13.5px;margin-top:5px}
+.kpi .s{color:var(--dim2);font-size:12.5px;margin-top:8px}
+.kpi.up .v{color:var(--ok)}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:rgba(255,255,255,.03)}
+.tbl-wrap{overflow-x:auto;border-radius:12px}
+
+input,select,textarea{
+  background:rgba(0,0,0,.34);border:1px solid var(--line);border-radius:11px;
+  padding:10px 12px;width:100%;color:var(--text);font:inherit;transition:.16s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(91,157,255,.55);
+  box-shadow:0 0 0 3px rgba(91,157,255,.14)}
+textarea{resize:vertical;font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:13px;line-height:1.55}
+label{display:block;color:var(--dim);font-size:13px;margin:0 0 6px}
+.field{margin-bottom:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1;min-width:140px}
+
+.btn{background:linear-gradient(180deg,#fdfdfd,#e9e9ec);color:#000;border:0;border-radius:11px;
+  padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;transition:.14s;
+  box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.btn:hover{filter:brightness(1.05)}
+.btn:active{transform:scale(.98)}
+.btn.ghost{background:rgba(255,255,255,.08);color:var(--text);
+  border:1px solid var(--line);box-shadow:0 1px 0 var(--hi) inset}
+.btn.danger{background:rgba(70,22,27,.8);color:#ff9d9d;border:1px solid rgba(120,40,48,.7);box-shadow:none}
+.btn.sm{padding:6px 12px;font-size:13px;border-radius:9px}
+.btn[disabled]{opacity:.45;cursor:default}
+form.inline{display:inline}
+
+.tag{display:inline-block;padding:3px 9px;border-radius:8px;font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.tag.pro{background:rgba(29,55,35,.9);color:var(--ok)}
+.tag.free{background:rgba(255,255,255,.07);color:var(--dim)}
+.tag.ban{background:rgba(70,22,27,.9);color:#ff9d9d}
+.tag.adm{background:rgba(23,40,70,.9);color:var(--accent)}
+
+.flash{border-radius:13px;padding:13px 16px;margin-bottom:16px;font-weight:500;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.flash.ok{background:rgba(20,45,28,.6);color:var(--ok);border:1px solid rgba(40,90,55,.7)}
+.flash.err{background:rgba(45,20,24,.6);color:var(--err);border:1px solid rgba(90,36,42,.7)}
+.flash.warn{background:rgba(45,37,20,.6);color:var(--warn);border:1px solid rgba(90,76,36,.7)}
+
+.dim{color:var(--dim)}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.split{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.nowrap{white-space:nowrap}
+
+/* ── диаграммы ────────────────────────────────── */
+.chart{display:flex;align-items:flex-end;gap:6px;height:150px;padding-bottom:22px;position:relative}
+.chart .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;position:relative}
+.chart .bar{border-radius:6px 6px 3px 3px;min-height:4px;
+  background:linear-gradient(180deg,var(--accent),rgba(91,157,255,.25));
+  box-shadow:0 0 18px rgba(91,157,255,.25);transition:filter .15s}
+.chart .col:hover .bar{filter:brightness(1.3)}
+.chart .lb{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);
+  font-size:10.5px;color:var(--dim2);white-space:nowrap}
+.legend{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.legend .it{display:flex;align-items:center;gap:9px;font-size:13.5px}
+.legend .dot{width:10px;height:10px;border-radius:3px;flex:none}
+.legend .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.legend .vl{color:var(--dim);font-variant-numeric:tabular-nums}
+.donut{display:block;margin:0 auto 6px}
+.donut text{fill:var(--text);font-weight:700}
+.donut .sub{fill:var(--dim);font-weight:500}
+.hbar{margin:11px 0}
+.hbar .top{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px;gap:10px}
+.hbar .top b{font-weight:600}
+.hbar .track{height:8px;border-radius:4px;background:rgba(255,255,255,.06);overflow:hidden}
+.hbar .fill{height:100%;border-radius:4px;
+  background:linear-gradient(90deg,var(--accent2),var(--accent));
+  box-shadow:0 0 14px rgba(123,133,255,.3)}
+
+/* ── переписка ────────────────────────────────── */
+.talk{display:flex;flex-direction:column;gap:14px}
+.bub{max-width:76%;border-radius:16px;padding:12px 15px;font-size:14.5px;line-height:1.55;
+  white-space:pre-wrap;word-break:break-word}
+.bub.u{align-self:flex-end;background:rgba(91,157,255,.15);border:1px solid rgba(91,157,255,.25)}
+.bub.a{align-self:flex-start;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.bub .meta{font-size:11.5px;color:var(--dim2);margin-top:8px;display:flex;gap:9px;flex-wrap:wrap}
+.bub .think{margin-top:9px;padding:9px 11px;border-radius:11px;background:rgba(0,0,0,.3);
+  color:var(--dim);font-size:13px;max-height:150px;overflow-y:auto}
+.bub .atts{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+.bub .att{font-size:12px;color:var(--dim);background:rgba(0,0,0,.3);
+  border-radius:8px;padding:5px 9px}
+.bub img.ph{max-width:150px;border-radius:11px;display:block}
+.checks{display:flex;gap:16px;flex-wrap:wrap;padding:10px 0}
+.chk{display:flex;align-items:center;gap:7px;margin:0;color:var(--text);font-size:14px;cursor:pointer}
+.chk input{width:auto;margin:0}
+
+/* ── телефон ──────────────────────────────────── */
+@media (max-width:720px){
+  header.top{padding:10px 12px 0;gap:8px 10px}
+  .brand{flex:1;min-width:0;font-size:15px}
+  nav{order:3;flex:0 0 calc(100% + 24px);flex-wrap:nowrap;overflow-x:auto;
+    margin:0 -12px;padding:2px 12px 9px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  nav::-webkit-scrollbar{display:none}
+  nav a{flex:none;white-space:nowrap;padding:7px 12px}
+  main{padding:16px 12px 60px}
+  h1{font-size:20px;margin-bottom:14px}
+  h2{font-size:15px}
+  .card{padding:14px;border-radius:15px;overflow-x:auto}
+  .grid{gap:10px}
+  .grid.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi{padding:13px 14px;border-radius:14px}
+  .kpi .v{font-size:22px}
+  .kpi .l{font-size:12.5px}
+  .kpi .s{font-size:11.5px}
+  table{font-size:13.5px}
+  th,td{padding:8px 7px}
+  .tbl-wrap{-webkit-overflow-scrolling:touch}
+  .tbl-wrap td,.tbl-wrap th{white-space:nowrap}
+  .row>*{min-width:0}
+  .split{align-items:flex-start}
+  .split h1{margin-bottom:8px}
+  input,select,textarea{font-size:16px}   /* iOS не зумит при фокусе */
+  .bub{max-width:94%}
+  .chart{gap:3px;height:120px}
+  .chart .lb{font-size:9px}
+  .flash{padding:11px 13px;font-size:14px}
+}
+</style>
+</head>
+<script>document.querySelector("nav a.on")?.scrollIntoView({inline:"center",block:"nearest"});</script>
+<body>
+<header class="top">
+  <span class="brand">
+    <img src="/img/logo.png" alt="" onerror="this.style.display='none'" />
+    БЕЛЕБАЛАРДЫХ AI
+  </span>
+  <nav>
+    <a href="/admin" class="{{ 'on' if tab=='dash' }}">Статистика</a>
+    <a href="/admin/users" class="{{ 'on' if tab=='users' }}">Пользователи</a>
+    <a href="/admin/chats" class="{{ 'on' if tab=='chats' }}">Чаты</a>
+    <a href="/admin/promos" class="{{ 'on' if tab=='promos' }}">Промокоды</a>
+    <a href="/admin/broadcasts" class="{{ 'on' if tab=='broadcasts' }}">Рассылки</a>
+    <a href="/admin/payments" class="{{ 'on' if tab=='payments' }}">Платежи</a>
+    <a href="/admin/config" class="{{ 'on' if tab=='config' }}">Модели</a>
+    <a href="/admin/settings" class="{{ 'on' if tab=='settings' }}">Настройки</a>
+  </nav>
+  <form method="post" action="/admin/logout"><button class="btn ghost sm">Выйти</button></form>
+</header>
+<main>
+  {% if ok %}<div class="flash ok">{{ ok }}</div>{% endif %}
+  {% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+  {% if weak_password %}<div class="flash warn">ADMIN_PASSWORD не изменён — поставьте свой пароль в .env</div>{% endif %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

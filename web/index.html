@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#000000" />
+<meta name="referrer" content="no-referrer" />
+<title>БЕЛЕБАЛАРДЫХ AI</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css" />
+<link rel="stylesheet" href="/css/app.css?v=9" />
+<link rel="stylesheet" href="/css/ui.css?v=9" />
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<!-- defer: KaTeX грузится после app.js, а app.js по событию перерисовывает чат -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"
+        onload="window.dispatchEvent(new Event('katex:ready'))"></script>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="scroll" id="scroll"></div>
+
+  <div class="fade top"></div>
+  <div class="fade bottom"></div>
+
+  <header class="header" id="header">
+    <button class="icon-btn glass" id="burger" aria-label="Меню"></button>
+    <div class="header-center">
+      <button class="model-pill glass" id="pill">
+        <span class="nm" id="pill-name">—</span>
+        <span class="plan" id="pill-plan"></span>
+        <span class="chev" id="pill-chev"></span>
+      </button>
+    </div>
+    <div class="header-right glass">
+      <button class="icon-btn" id="new-top" aria-label="Новый чат"></button>
+      <div class="avatar" id="av-top"><img alt="" /></div>
+    </div>
+  </header>
+
+  <div class="composer" id="composer">
+    <div class="pending" id="pending" hidden></div>
+    <div class="c-inner glass">
+      <button class="round" id="attach" aria-label="Прикрепить"></button>
+      <textarea id="ta" rows="1" placeholder="Введите запрос" enterkeyhint="send"></textarea>
+      <button class="round send" id="send" data-haptic="off" disabled aria-label="Отправить"></button>
+    </div>
+    <div class="disclaimer">Модель может ошибаться</div>
+    <input type="file" id="file-input" multiple hidden
+           accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.yml,.yaml,.xml,.py,.js,.ts,.html,.css,.sql,.log" />
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-top">
+      <div class="sb-brand">
+        <img class="sb-logo" id="sb-logo" alt="" />
+        <h2>БЕЛЕБАЛАРДЫХ AI</h2>
+      </div>
+      <button class="icon-btn glass" id="close-sb" aria-label="Закрыть"></button>
+    </div>
+
+    <div class="sb-acts" id="sb-acts"></div>
+
+    <div class="sb-label">Все чаты</div>
+    <div class="chats" id="chats"></div>
+
+    <button class="sb-foot" id="sb-foot">
+      <div class="avatar" id="av-side"><img alt="" /></div>
+      <div class="sb-foot-meta">
+        <div class="name" id="u-name">—</div>
+        <div class="plan" id="u-plan"></div>
+      </div>
+    </button>
+  </aside>
+
+  <div id="layer"></div>
+
+  <div class="boot" id="boot">
+    <div class="boot-inner">
+      <div class="spinner"></div>
+      <p id="boot-text">Загружаем…</p>
+    </div>
+  </div>
+</div>
+
+<script src="/js/icons.js?v=9"></script>
+<script src="/js/haptic.js?v=9"></script>
+<script src="/js/markdown.js?v=9"></script>
+<script src="/js/api.js?v=9"></script>
+<script src="/js/app.js?v=9"></script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+/* =========================================================
+   tex.css — вёрстка формул (mathtex.js), картинок из ответа
+   и блока источников.
+   ========================================================= */
+
+/* ── общая формула ───────────────────────────────────────── */
+.tex{
+  font-family:"Cambria Math","Latin Modern Math","STIX Two Math",
+    "Times New Roman",Georgia,serif;
+  line-height:1.2;font-size:1.06em;
+  -webkit-font-smoothing:antialiased;
+  text-align:left;direction:ltr;
+}
+.tex-inline{display:inline-block;vertical-align:-.22em;white-space:nowrap;max-width:100%}
+
+.tex-display{
+  display:block;margin:14px 0;padding:2px 0;
+  text-align:center;
+  overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.tex-display::-webkit-scrollbar{display:none}
+.tex-display>*{white-space:nowrap}
+
+.tex-var{font-style:italic;font-family:inherit}
+.tex-op,.tex-text{font-style:normal;font-family:inherit}
+.tex-b{font-weight:700}
+.tex-cal{font-style:italic;font-family:"Apple Chancery","URW Chancery L",cursive,serif}
+.tex-mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.92em}
+.tex-bin{padding:0 .16em}
+.tex-op{padding-right:.12em}
+.tex-grp{white-space:nowrap}
+.tex-sp{display:inline-block}
+.tex-nl{display:block;height:.35em}
+
+/* ── индексы и степени ───────────────────────────────────── */
+.tex-sup,.tex-sub{font-size:.72em;line-height:1;display:inline-block}
+.tex-sup{vertical-align:.52em}
+.tex-sub{vertical-align:-.28em}
+.tex-ss{display:inline-flex;flex-direction:column;vertical-align:-.28em;
+  font-size:.72em;line-height:1.05;text-align:left}
+.tex-ss-u{display:block}
+.tex-ss-d{display:block}
+
+/* ── дробь ───────────────────────────────────────────────── */
+.tex-frac{
+  display:inline-flex;flex-direction:column;align-items:center;
+  vertical-align:-.52em;margin:0 .14em;text-align:center;
+}
+.tex-frac .tex-num{display:block;padding:0 .22em .07em;
+  border-bottom:1px solid currentColor;line-height:1.2}
+.tex-frac .tex-den{display:block;padding:.07em .22em 0;line-height:1.2}
+.tex-frac-sm{font-size:.85em}
+.tex-binom .tex-num{border-bottom:0;padding-bottom:0}
+.tex-binom .tex-den{padding-top:0}
+
+/* ── корень ──────────────────────────────────────────────── */
+.tex-sqrt{display:inline-flex;align-items:stretch;vertical-align:-.12em;position:relative}
+.tex-sqrt .tex-radical{
+  display:inline-block;transform:scaleY(1.12);transform-origin:center;
+  margin-right:.04em;
+}
+.tex-sqrt .tex-rad{
+  display:inline-block;border-top:1px solid currentColor;
+  padding:.13em .18em 0 .08em;margin-top:.08em;
+}
+.tex-sqrt .tex-root{
+  font-size:.62em;align-self:flex-start;
+  margin-right:-.5em;margin-top:-.1em;z-index:1;
+}
+
+/* ── черта сверху/снизу, векторы ─────────────────────────── */
+.tex-ovl{display:inline-block;border-top:1px solid currentColor;padding-top:.1em;margin-top:.1em}
+.tex-unl{display:inline-block;border-bottom:1px solid currentColor;padding-bottom:.08em}
+
+.tex-acc{display:inline-flex;flex-direction:column;align-items:center;
+  vertical-align:-.1em;line-height:1}
+.tex-acc .tex-acc-m{
+  display:block;font-size:.8em;height:.42em;line-height:.42em;
+  margin-bottom:.02em;font-style:normal;
+}
+.tex-acc .tex-acc-b{display:block}
+/* стрелка вектора тянется по ширине символа, а не торчит рядом */
+.tex-acc-w .tex-acc-m{
+  font-size:.62em;height:.38em;line-height:.38em;
+  transform:scaleX(1.5);transform-origin:center;
+}
+
+/* ── ограничители ────────────────────────────────────────── */
+.tex-delim{display:inline-block;transform:scaleY(1.22);transform-origin:center;padding:0 .02em}
+.tex-delim-l{transform:scaleY(1.55)}
+.tex-delim-xl{transform:scaleY(1.95)}
+.tex-big{display:inline-block;font-size:1.42em;line-height:.8;vertical-align:-.22em;padding:0 .06em}
+
+/* ── рамка ответа ────────────────────────────────────────── */
+.tex-boxed{
+  display:inline-block;padding:.3em .55em;margin:0 .1em;
+  border:1px solid rgba(255,255,255,.34);border-radius:7px;
+}
+
+/* ── матрицы, cases, системы ─────────────────────────────── */
+.tex-env{display:inline-flex;align-items:center;vertical-align:middle;gap:.1em}
+.tex-fence{display:inline-block;font-size:1.25em;transform-origin:center}
+.tex-arr{display:inline-grid;gap:.22em .7em;align-items:center;justify-items:center;padding:.1em .22em}
+.tex-arr-l{justify-items:start}
+.tex-cell{display:block;white-space:nowrap}
+
+/* формула, которую не удалось разобрать: показываем как есть */
+.tex-raw{font-family:ui-monospace,Menlo,monospace;font-size:.9em;color:var(--dim)}
+
+/* ── картинки в ответе модели ────────────────────────────── */
+.md-img{display:block;margin:12px 0}
+.md-img img{
+  display:block;max-width:100%;width:auto;max-height:62vh;
+  border-radius:16px;background:#141416;border:1px solid rgba(255,255,255,.07);
+}
+.md-img img.broken{display:none}
+.md-img-cap{display:block;margin-top:7px;font-size:13.5px;color:var(--dim);line-height:1.35}
+.md-img.failed .md-img-cap{opacity:.6}
+
+/* ── таблица: горизонтальная прокрутка на телефоне ───────── */
+.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 14px;
+  scrollbar-width:none}
+.tbl-scroll::-webkit-scrollbar{display:none}
+.tbl-scroll table{margin:0;min-width:100%}
+
+/* ── источники: чип рядом с действиями ───────────────────── */
+.src-chip{
+  display:inline-flex;align-items:center;gap:7px;height:34px;
+  padding:0 11px;border-radius:11px;flex:none;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);
+  color:#c4c4c9;font-size:13.5px;font-weight:500;letter-spacing:-.01em;
+  transition:background .16s,transform .12s;
+}
+.src-chip:active{transform:scale(.95);background:rgba(255,255,255,.1)}
+@media(hover:hover){.src-chip:hover{background:rgba(255,255,255,.09);color:#eee}}
+.src-chip .favs{display:inline-flex;align-items:center;flex:none}
+.src-chip .favs img,
+.src-chip .favs i{
+  width:16px;height:16px;border-radius:50%;display:block;
+  background:#2a2a2e;border:1.5px solid #0a0a0b;object-fit:cover;
+}
+.src-chip .favs>*+*{margin-left:-5px}
+.src-chip .favs i{
+  font-style:normal;font-size:8.5px;line-height:13px;text-align:center;
+  color:#9a9aa0;
+}
+
+/* лист со списком источников */
+.src-list{padding:2px 4px 6px}
+.src-item{
+  display:flex;gap:12px;align-items:flex-start;width:100%;text-align:left;
+  padding:12px;border-radius:14px;color:inherit;text-decoration:none;
+  transition:background .15s;
+}
+.src-item:active{background:rgba(255,255,255,.07)}
+@media(hover:hover){.src-item:hover{background:rgba(255,255,255,.05);text-decoration:none}}
+.src-item .fav{width:26px;height:26px;border-radius:8px;flex:none;margin-top:1px;
+  background:#1f1f23;object-fit:cover}
+.src-item .meta{flex:1;min-width:0}
+.src-item .ttl{font-size:15.5px;line-height:1.3;color:#f2f2f2;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.src-item .host{font-size:13px;color:var(--dim);margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src-item .num{font-size:13px;color:var(--dim-2);flex:none;margin-top:3px;
+  font-variant-numeric:tabular-nums}
+
+/* ── формулы внутри пузыря пользователя ──────────────────── */
+.bubble .tex-display{margin:10px 0;text-align:left}
+
+/* ── узкие экраны ────────────────────────────────────────── */
+@media (max-width:420px){
+  .tex{font-size:1.02em}
+  .tex-display{margin:12px 0}
+  .md-img img{max-height:52vh}
+}
