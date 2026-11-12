@@ -1,0 +1,25 @@
+energy_unit: 3000          # базовых токенов в 1 энергии
+
+plans:
+  free:
+    title: "Free"
+    energy: 50             # 150 000 базовых токенов
+    refill_days: 30        # автопополнение раз в 30 дней
+    max_attachments: 0     # вложения только в Pro
+    context_messages: 10   # сколько прошлых сообщений уходит в модель
+    web_search: false
+
+  pro:
+    title: "Pro"
+    price_rub: 150
+    days: 30
+    energy: 1000           # 3 000 000 базовых токенов
+    refill_days: 0         # выдаётся при покупке
+    max_attachments: 4
+    context_messages: 40
+    web_search: true
+    features:
+      - "Все модели, включая GPT-5.6 и Opus 5"
+      - "1 000 энергии каждый месяц"
+      - "Картинки и файлы в запросах"
+      - "Длинный контекст диалога"
