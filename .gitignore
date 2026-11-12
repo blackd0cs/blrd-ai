@@ -8,3 +8,9 @@ config/*.bak
 __pycache__/
 *.pyc
 app/data/
+*.bak
+*.bak2
+*.broken
+.idea/
+*.db
+fragment_parser.db
